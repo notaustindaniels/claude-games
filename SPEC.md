@@ -1,0 +1,25 @@
+MISSION: Build "OpenOcean" — a complete, standalone three.js ocean rendering system whose feature set and visual quality match or exceed a commercial FFT ocean product (reference bar: Three.js Water Pro v3 by Dan Greenheck). Ship it as a reusable library with a minimal API (createOcean(renderer, scene, camera, options)) so that less capable LLMs and junior devs can integrate it without understanding the internals. No paid assets, no copied proprietary code — derive everything from published papers and open techniques (Tessendorf FFT, JONSWAP/Phillips spectra, Gerstner, GGX/Fresnel water optics).
+
+ENVIRONMENT DIRECTIVES:
+- Vite project, vanilla three.js. Target WebGPU/TSL (WebGPURenderer) with automatic WebGL2 fallback; ALL verification renders use whichever backend actually works headless — never claim a feature works without a rendered frame proving it.
+- Pin three.js to >=0.181.0 and record the exact version in README. If TSL APIs break, pin down, don't fight.
+- Set up headless verification FIRST, before any water code: a smoke script that serves the built app, drives headless Chromium (playwright-core; try installed browsers before downloading) with software-GL flags, waits for frames, captures a PNG via CDP Page.captureScreenshot, and reports console errors. If a frame can't be captured, that is the first bug to fix. A feature that renders in theory but not in the headless child DOES NOT COUNT — treat "invisible in the verification render" as failure, exactly.
+- Maintain progress.html: append a timestamped entry per pass with the screenshot(s), what changed, and an HONEST assessment vs the reference bar naming the specific visual tells that still break realism. Also print the current checklist status table (item / PASS-PARTIAL-FAIL / evidence screenshot filename) as plain text in your reply EVERY turn so it is visible in the transcript.
+
+ACCEPTANCE CHECKLIST (a PASS requires the criterion visible in a screenshot):
+W1 FFT wave simulation: heightfield synthesized from a JONSWAP or Phillips spectrum via GPU (or worker-based) FFT, min 256x256, wind speed + direction + fetch parameters. Prove with two screenshots at different wind speeds showing visibly different sea states.
+W2 Gerstner swell layer blended over the FFT field to break tiling; screenshot from high altitude showing no visible tile repetition across at least 4x4 tile spans.
+W3 Physically-based surface optics: Fresnel (grazing angle reflective, steep angle transmissive), GGX specular sun glint, depth-based absorption (bright turquoise shallows over seabed, dark saturated deep water). Two screenshots: looking down in shallows, low grazing angle at open sea.
+W4 Screen-space or planar reflections of above-water scene objects on the surface (place a lighthouse or ship primitive to prove it).
+W5 Three independent foam layers: wave-crest whitecaps (from Jacobian folding or crest detection), ambient surface foam, and shoreline/object-contact foam. Screenshot of each labeled.
+W6 Persistent crest foam: foam that decays over seconds rather than vanishing frame-to-frame (two screenshots ~2s apart showing the same foam patch fading).
+W7 Buoyancy API: GPU/CPU height + normal sampling; a floating box exhibiting pitch and roll on swells (screenshot mid-tilt) and a bobbing buoy (single-point mode).
+W8 Underwater mode: submerge the camera — underwater fog, waterline transition without a hard cut, and animated caustics on a procedural seabed. Screenshot below surface showing caustics.
+W9 Sun shafts underwater OR sea spray emitters at crests — at least one advanced atmosphere feature beyond the base set.
+W10 Deterministic mode: same seed + timestamp yields identical wave state across two separate runs (prove by pixel-diffing two independently launched renders at the same sim time; report diff percentage < 1%).
+W11 Environment presets: at least 6 named presets spanning glassy calm to storm; contact sheet of all presets rendered.
+W12 LOD/quality: at least 3 quality tiers changing FFT resolution and shading cost; report ms/frame or relative timing for each in the transcript.
+W13 API + docs: README with quickstart under 15 lines of user code, full options table, and preset docs. Library imports cleanly into a fresh Vite scaffold (prove by creating a second tiny consumer project that renders the ocean).
+W14 Robustness: final build passes, headless smoke run reports zero console errors, and reduced-quality tier holds interactive framerate in software rendering.
+
+CONDUCT: Work fully autonomously; never ask for confirmation — if uncertain, state the assumption in progress.html and proceed with your highest-confidence choice. When a pass fails, diagnose from the screenshot before writing code. Prefer fixing the WORST visual tell each pass (the thing a film VFX supervisor would flag first). Do not mark PASS optimistically: if you would hedge, it is PARTIAL. Hard stop: if any single item stays FAIL after 8 consecutive attempts, mark it BLOCKED with a written diagnosis and continue with the rest; the goal is then unmeetable and you must summarize the best achieved state. Soft budget: aim to converge within 60 turns.
