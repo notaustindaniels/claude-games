@@ -1,0 +1,31 @@
+{
+  "name": "openocean",
+  "version": "0.1.0",
+  "description": "OpenOcean — standalone FFT ocean rendering system for three.js (WebGPU/TSL with WebGL2 fallback)",
+  "type": "module",
+  "main": "src/lib/index.js",
+  "exports": {
+    ".": "./src/lib/index.js"
+  },
+  "files": [
+    "src/lib"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "smoke": "node scripts/smoke.mjs"
+  },
+  "peerDependencies": {
+    "three": ">=0.181.0"
+  },
+  "dependencies": {
+    "three": "0.181.0"
+  },
+  "devDependencies": {
+    "vite": "^6.3.5",
+    "playwright-core": "^1.61.1",
+    "pngjs": "^7.0.0"
+  },
+  "license": "MIT"
+}

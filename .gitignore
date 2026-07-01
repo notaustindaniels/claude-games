@@ -1,0 +1,4 @@
+node_modules/
+dist/
+consumer-test/node_modules/
+consumer-test/dist/

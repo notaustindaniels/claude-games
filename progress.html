@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>OpenOcean — progress log</title>
+<style>
+  body { font: 15px/1.5 system-ui, sans-serif; max-width: 1100px; margin: 2rem auto; padding: 0 1rem; background: #0e141b; color: #dde6ee; }
+  h1 { border-bottom: 2px solid #29506d; padding-bottom: .3rem; }
+  .entry { border: 1px solid #29506d; border-radius: 8px; padding: 1rem 1.2rem; margin: 1.5rem 0; background: #121c26; }
+  .entry h2 { margin-top: 0; font-size: 1.1rem; color: #7ec8ff; }
+  .shots { display: flex; flex-wrap: wrap; gap: 10px; }
+  .shots figure { margin: 0; }
+  .shots img { max-width: 520px; width: 100%; border: 1px solid #345; border-radius: 4px; }
+  .shots figcaption { font-size: .8rem; color: #9ab; }
+  .honest { background: #1a2430; border-left: 4px solid #e0a030; padding: .5rem .8rem; margin-top: .8rem; }
+  .honest strong { color: #e0a030; }
+  table { border-collapse: collapse; margin-top: .8rem; }
+  td, th { border: 1px solid #345; padding: .25rem .6rem; font-size: .85rem; }
+</style>
+</head>
+<body>
+<h1>OpenOcean — progress log</h1>
+<p>Reference bar: commercial FFT ocean (Three.js Water Pro v3 class). Each entry: timestamp, screenshots, what changed, honest assessment naming the visual tells that still break realism.</p>
+
+<!-- entries are appended below, newest last -->
+
+<div class="entry" id="pass-1">
+  <h2>Pass 1 — 2026-07-01 — Headless verification harness proven (before any water code)</h2>
+  <p><strong>What changed:</strong> Vite + three@0.181.0 scaffold targeting WebGPURenderer with automatic WebGL2 fallback (adapter/device probe — headless SwiftShader exposes a WebGPU adapter whose device immediately dies, so the probe requests a real device before trusting it). Harness: static server over <code>dist/</code>, headless Chromium via playwright-core with <code>--use-angle=swiftshader</code>, waits on a <code>window.__OO</code> frame/simTime contract, captures PNG via CDP <code>Page.captureScreenshot</code>, fails on any console/page error. Deterministic fixed-timestep mode (<code>?fixeddt=1</code>).</p>
+  <div class="shots">
+    <figure><img src="shots/harness-cube.png" alt="harness proof cube" /><figcaption>shots/harness-cube.png — lit spinning cube, WebGL2 backend, zero console errors</figcaption></figure>
+  </div>
+  <div class="honest"><strong>Honest assessment:</strong> No water exists yet; every checklist item is FAIL. The harness itself is proven (frame rendered, screenshot captured, error reporting works). Backend note: headless verification will run on the WebGL2 fallback backend of WebGPURenderer; WebGPU device creation is broken under SwiftShader in this container. Worst remaining visual tell: there is no ocean.</div>
+</div>
+
+</body>
+</html>
