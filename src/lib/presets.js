@@ -115,7 +115,7 @@ export const PRESETS = {
     sim: {
       tileSize: 420, windSpeed: 21, windDirection: 40, fetch: 500000,
       choppiness: 1.6, directionality: 5, smallWaveCutoff: 0.012,
-      amplitudeScale: 1.05, foamGain: 13, foamBias: 0.62, foamDecay: 8,
+      amplitudeScale: 1.05, foamGain: 13, foamBias: 0.66, foamDecay: 8,
     },
     swell: [
       { amplitude: 2.6, wavelength: 280, direction: 65, steepness: 0.6 },

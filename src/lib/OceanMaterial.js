@@ -7,7 +7,7 @@ import {
   Fn, uniform, texture, positionLocal, cameraPosition, varying, float, vec2,
   vec3, normalize, dot, max, min, clamp, saturate, mix, exp, pow, abs, sin,
   cos, reflect, refract, smoothstep, oneMinus, length, mx_noise_float, select,
-  frontFacing, reflector, fwidth, attribute,
+  frontFacing, reflector, fwidth, attribute, dFdx, dFdy,
 } from 'three/tsl';
 import { MAX_SWELL } from './gerstner.js';
 import { causticsNode } from './caustics.js';
@@ -157,12 +157,13 @@ export function makeFieldFns(u, dispTex, normTex) {
   // 30 m waves regardless of texture resolution). Band edges are literals
   // (cascade 0's top edge derives from its tile size).
   const SW = ['x', 'y', 'z'];
-  const BAND_LO = [29.5 / 3, 6.5 / 3, 0.45 / 3];
+  const BAND_MIN = [29.5, 6.5, 0.45];
   const fftDisp = Fn(([wxz, sampleSize]) => {
     const disp = vec3(0).toVar();
     for (let c = 0; c < dispTex.length; c++) {
-      const hi = c === 0 ? float(85.0) : float(BAND_LO[c - 1]); // V1: all-literal edges
-      const fade = oneMinus(smoothstep(float(BAND_LO[c]), hi, sampleSize));
+      // NOTE: literal edges only — uniform-derived smoothstep edges read 0
+      // in the vertex stage on the WebGL2 fallback.
+      const fade = oneMinus(smoothstep(float(BAND_MIN[c] / 5), float(BAND_MIN[c] / 2.5), sampleSize));
       disp.addAssign(dispTex[c].sample(wxz.div(u.tiles[SW[c]])).xyz.mul(fade));
     }
     return disp;
@@ -220,8 +221,13 @@ export function makeOceanMaterial(u, deps) {
   const worldXZ = positionLocal.xz.add(u.meshOffset);
   const gridSpacing = attribute('spacing', 'float');
   // Each displacement source fades before the local grid density
-  // undersamples it (moiré/chevron artifacts otherwise).
-  const totalD = fftDisp(worldXZ, gridSpacing).add(swellDisp(worldXZ, gridSpacing));
+  // undersamples it (moiré/chevron artifacts otherwise). Swell geometry
+  // additionally damps with camera distance — from altitude the twin swell
+  // trains read as synthetic interference bands.
+  const vertCamDist = length(vec3(worldXZ.x, 0, worldXZ.y).sub(cameraPosition));
+  const swellDistDamp = mix(float(1.0), float(0.25), smoothstep(float(600), float(1800), vertCamDist));
+  const totalD = fftDisp(worldXZ, gridSpacing)
+    .add(swellDisp(worldXZ, gridSpacing).mul(swellDistDamp));
 
   material.positionNode = positionLocal.add(totalD);
 
@@ -256,7 +262,10 @@ export function makeOceanMaterial(u, deps) {
     // manual mip logic: fwidth gives metres-per-pixel; each cascade fades
     // out as the footprint crosses its texel (inside fftSlopes), and the
     // noisy shading terms follow the mid cascade's kill.
-    const footprint = max(fwidth(vWorldPos.x), fwidth(vWorldPos.z));
+    // Isotropic footprint (mean derivative length): max(fwidth x, fwidth z)
+    // kinks along the lines where the argmax flips, which draws a radial fan
+    // of cascade-fade bands across high-altitude views.
+    const footprint = length(dFdx(vWorldPos.xz)).add(length(dFdy(vWorldPos.xz))).mul(0.5);
     const detailKill = smoothstep(u.texels.y.mul(0.5), u.texels.y.mul(3.0), footprint);
     const distRough = detailKill;
 
@@ -303,7 +312,7 @@ export function makeOceanMaterial(u, deps) {
     // The foam field texture has no mips on the fallback backend; fade it
     // out once the pixel footprint exceeds its texel (later than the normal
     // detail kill — foam blobs are metres wide and survive further).
-    const foamKill = smoothstep(u.texels.x.mul(1.5), u.texels.x.mul(8.0), footprint);
+    const foamKill = smoothstep(u.texels.x.mul(5.0), u.texels.x.mul(24.0), footprint);
     // Shape the field: cut the low-value haze that advection smears across
     // whole convergence bands (it binarizes into dust), keep the mat cores.
     const foamShaped = saturate(foamSim.mul(1.3).sub(0.09));
@@ -347,7 +356,8 @@ export function makeOceanMaterial(u, deps) {
 
     // Fresnel (Schlick, F0 = 0.02). Stays smooth at distance because the
     // slopes feeding nUp are already flattened by detailKill.
-    const fres = float(0.02).add(pow(oneMinus(NdotV), float(5.0)).mul(0.98));
+    const fres = float(0.02).add(pow(oneMinus(NdotV), float(5.0)).mul(0.98))
+      .mul(mix(float(1.0), float(0.6), distRough));
 
     // Reflection: planar reflector when enabled, procedural sky otherwise.
     const reflDir0 = reflect(V.negate(), nUp);
@@ -401,14 +411,14 @@ export function makeOceanMaterial(u, deps) {
       // Translucent foam film: where foam amount exists but the lace mat has
       // torn away, the surface keeps a milky green-white stain (the
       // reference foam always shows this stage between mat and clear water).
-      const film = smoothstep(float(0.05), float(0.5), foamAmt)
-        .mul(oneMinus(foam)).mul(0.34);
+      const film = smoothstep(float(0.12), float(0.6), foamAmt)
+        .mul(oneMinus(foam)).mul(0.28);
       const filmColor = u.foamColor.mul(vec3(0.8, 0.92, 0.96))
         .mul(NdotL.mul(0.6).add(0.4)).mul(max(u.sunIntensity, 0.4));
       water = mix(water, filmColor, film);
     }
     const foamLight = u.foamColor.mul(foamShade)
-      .mul(NdotL.mul(0.85).add(0.35)).mul(max(u.sunIntensity, 0.4));
+      .mul(NdotL.mul(0.75).add(0.48)).mul(max(u.sunIntensity, 0.4));
     const above = mix(water, foamLight, foam).add(spec.mul(oneMinus(foam)));
 
     // Underside (camera underwater looking up at the surface).

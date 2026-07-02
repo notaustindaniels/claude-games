@@ -148,7 +148,19 @@ export function makeCausticsPass({ sim, mapSize = 768, gridSegments = 256, regio
   const wxz = positionLocal.xz.mul(regionSize).add(cu.regionCenter);
   const disp = fields.fftDisp(wxz, gridSpacing).add(fields.swellDisp(wxz, gridSpacing));
   const surfP = vec3(wxz.x.add(disp.x), disp.y, wxz.y.add(disp.z));
-  const slopes = fields.fftSlopes(wxz, gridSpacing, float(1)).add(fields.swellSlopes(wxz, gridSpacing));
+  // Caustic-specific slope assembly: every cascade at FULL weight — the
+  // water material's footprint kill and detailNormal scaling would erase
+  // the fine chop that drives the caustic web (the map's blur handles any
+  // grid-rate aliasing).
+  const SWC = ['x', 'y', 'z'];
+  let slopes = fields.swellSlopes(wxz, gridSpacing);
+  for (let c = 0; c < normTex.length; c++) {
+    const n = normTex[c].sample(wxz.div(cu.tiles[SWC[c]]));
+    slopes = slopes.add(vec2(
+      n.x.negate().div(max(n.y, 0.2)),
+      n.z.negate().div(max(n.y, 0.2))
+    ));
+  }
   const nrm = normalize(vec3(slopes.x.negate(), 1, slopes.y.negate()));
 
   const inc = cu.sunDir.negate(); // light travel direction
