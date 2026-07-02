@@ -1,0 +1,50 @@
+[
+ {
+  "name": "ab-w1-grazing",
+  "params": "scenario=ocean&fixeddt=1&dt=0.25&preset=moderate&windspeed=16&swell=0&seed=1337&seabed=0&lighthouse=0&crate=0&buoy=0&cam=0,10,0&look=105,0,-228&label=AB:+grazing+wind+16",
+  "width": 960,
+  "height": 540,
+  "captures": [
+   {
+    "untilSimTime": 10,
+    "out": "shots/ab-w1-grazing.png"
+   }
+  ]
+ },
+ {
+  "name": "ab-q1-altitude",
+  "params": "scenario=ocean&preset=moderate&fixeddt=1&dt=0.25&seed=1337&seabed=0&lighthouse=0&crate=0&buoy=0&cam=0,260,0&look=350,0,-600&hud=0",
+  "width": 960,
+  "height": 540,
+  "captures": [
+   {
+    "untilSimTime": 10,
+    "out": "shots/ab-q1-altitude.png"
+   }
+  ]
+ },
+ {
+  "name": "ab-q4-into-sun",
+  "params": "scenario=ocean&preset=rough&fixeddt=1&dt=0.25&seed=1337&seabed=0&lighthouse=0&crate=0&buoy=0&cam=0,2.6,0&look=16,3.4,23&sunel=7&sunaz=35&hud=0",
+  "width": 960,
+  "height": 540,
+  "captures": [
+   {
+    "untilSimTime": 13,
+    "out": "shots/ab-q4-into-sun.png"
+   }
+  ]
+ },
+ {
+  "name": "ab-q2-foam",
+  "params": "scenario=ocean&preset=rough&fixeddt=1&dt=0.25&seed=1337&seabed=0&lighthouse=0&crate=0&buoy=0&cam=0,26,0&look=18,0,-38&label=AB:+foam+look",
+  "width": 960,
+  "height": 540,
+  "captures": [
+   {
+    "untilSimTime": 20,
+    "out": "shots/ab-q2-foam.png"
+   }
+  ]
+ }
+]

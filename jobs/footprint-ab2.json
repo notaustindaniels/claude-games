@@ -1,0 +1,14 @@
+[
+ {
+  "name": "ab-q2-foam",
+  "params": "scenario=ocean&preset=rough&fixeddt=1&dt=0.25&seed=1337&seabed=0&lighthouse=0&crate=0&buoy=0&cam=0,26,0&look=18,0,-38&label=AB:+foam+look",
+  "width": 960,
+  "height": 540,
+  "captures": [
+   {
+    "untilSimTime": 14,
+    "out": "shots/ab-q2-foam.png"
+   }
+  ]
+ }
+]

@@ -7,7 +7,7 @@ import {
   Fn, uniform, texture, positionLocal, cameraPosition, varying, float, vec2,
   vec3, normalize, dot, max, min, clamp, saturate, mix, exp, pow, abs, sin,
   cos, reflect, refract, smoothstep, oneMinus, length, mx_noise_float, select,
-  frontFacing, reflector, fwidth, attribute, dFdx, dFdy,
+  frontFacing, reflector, fwidth, attribute, dFdx, dFdy, sqrt,
 } from 'three/tsl';
 import { MAX_SWELL } from './gerstner.js';
 import { causticsNode } from './caustics.js';
@@ -266,10 +266,15 @@ export function makeOceanMaterial(u, deps) {
     // manual mip logic: fwidth gives metres-per-pixel; each cascade fades
     // out as the footprint crosses its texel (inside fftSlopes), and the
     // noisy shading terms follow the mid cascade's kill.
-    // Isotropic footprint (mean derivative length): max(fwidth x, fwidth z)
-    // kinks along the lines where the argmax flips, which draws a radial fan
-    // of cascade-fade bands across high-altitude views.
-    const footprint = length(dFdx(vWorldPos.xz)).add(length(dFdy(vWorldPos.xz))).mul(0.5);
+    // Footprint = GEOMETRIC mean of the two derivative lengths. max() kinks
+    // along the argmax-flip lines (radial fan from altitude); the arithmetic
+    // mean is dominated by the view-depth derivative at grazing angles and
+    // kills detail whose cross-view frequency is still resolvable (the whole
+    // mid-field smears smooth from a deck-height camera). The geometric mean
+    // stays smooth AND tracks the resolvable direction at grazing incidence.
+    const footprint = sqrt(
+      length(dFdx(vWorldPos.xz)).mul(length(dFdy(vWorldPos.xz))).add(1e-12)
+    );
     const detailKill = smoothstep(u.texels.y.mul(0.5), u.texels.y.mul(3.0), footprint);
     const distRough = detailKill;
 

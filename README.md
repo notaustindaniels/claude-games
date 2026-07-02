@@ -1,9 +1,14 @@
 # OpenOcean
 
 A standalone FFT ocean rendering system for [three.js](https://threejs.org), built on the
-WebGPU renderer + TSL node materials with an automatic WebGL2 fallback. Everything is
-derived from published techniques — Tessendorf FFT spectra (JONSWAP / Phillips),
-Gerstner swell, GGX/Fresnel water optics — with no proprietary code or paid assets.
+WebGPU renderer + TSL node materials with an automatic WebGL2 fallback. The simulation
+is a GPU FFT (fragment-shader ping-pong, so it also runs on the WebGL2 fallback) with
+three wavelength-banded cascades, advected persistent whitecap foam, refracted-ray
+seabed caustics, backlit-crest subsurface scattering and breaking-crest spray
+particles. Everything is derived from published techniques — Tessendorf FFT spectra
+(JONSWAP / Phillips), Gerstner swell, GGX/Fresnel water optics, Wallace-style caustics
+(studied from a public WebGL demo, reimplemented from scratch in TSL) — with no
+proprietary code or paid assets.
 
 **three.js version: pinned to `0.181.0`** (declared peer range `>=0.181.0`).
 
@@ -65,6 +70,8 @@ input-free determinism, which is unaffected because the camera only moves on inp
 | `sky`         | `boolean`                                                            | `true`       | built-in procedural sky dome |
 | `reflections` | `boolean`                                                            | `true`       | planar reflections of scene objects (off on `low`) |
 | `sunShafts`   | `boolean`                                                            | `true`       | underwater crepuscular light shafts |
+| `spray`       | `boolean`                                                            | `true`       | GPU particle spray at breaking crests (preset-scaled; zero on calm presets) |
+| `caustics`    | `boolean`                                                            | `true`       | refracted-ray seabed caustics (needs `seabed`; camera-local map) |
 | `seabed`      | `{ texture, bounds: [minX, minZ, sizeX, sizeZ], deepY } \| null`     | `null`       | heightfield for shallows/absorption/contact foam |
 | `fftSize`     | `number` (power of two)                                              | tier value   | override the FFT resolution |
 | `segments`    | `number`                                                             | tier value   | override surface grid density |
@@ -81,8 +88,9 @@ input-free determinism, which is unaffected because the camera only moves on inp
 | `ocean.underwater` | `true` while the camera is submerged |
 | `ocean.cameraSurfaceHeight` | water height under the camera this frame |
 | `ocean.uniforms`, `ocean.material`, `ocean.surface`, `ocean.sim` | escape hatches for advanced use |
+| `ocean.spray`, `ocean.causticsTexture`, `ocean.causticsSample` | spray system / caustic map + TSL sampler for your own seabed materials |
 | `ocean.wrapUnderwaterFog(buildColorFn)` | wrap your own material colors in the underwater murk |
-| `ocean.stats.simMs` | worker simulation cost of the last step |
+| `ocean.stats.simMs` | render-thread cost of the last sim step (GPU pass encode + buoyancy-mirror lockstep) |
 
 ## Presets
 
@@ -104,9 +112,10 @@ input-free determinism, which is unaffected because the camera only moves on inp
 | `medium` | 256²   | 224           | on (0.35× res)     | ~25 ms |
 | `high`   | 512²   | 320           | on (0.5× res)      | ~150 ms |
 
-*Worker thread cost per sim step measured under software rendering (SwiftShader);
-GPU-accelerated machines are far faster. The renderer never blocks on the worker
-beyond one lockstep await.
+*Render-thread cost per sim step measured under software rendering (SwiftShader).
+The FFT itself runs on the GPU (fragment-shader ping-pong); the per-step CPU work is
+pass encoding plus one lockstep await on the 64² buoyancy-mirror worker, so real GPUs
+spend milliseconds here regardless of tier.
 
 ## Verification
 
@@ -131,6 +140,12 @@ console errors. See `progress.html` for the pass-by-pass evidence log.
   long range from altitude; damped but not fully decorrelated.
 - **Underwater god rays are billboards**, not volumetrics — convincing in stills and
   gentle motion, not a true participating-media solution.
-- **The caustics are procedural Worley approximations**, not refracted-light caustics.
+- **Caustics are computed in a camera-local window** (~56 m across, re-rendered each
+  frame) and fade to neutral light beyond it — correct where you look, absent far away.
+- **Buoyancy queries run on a 64² CPU mirror of the structural cascade only** — the
+  two fine-detail cascades (centimetre chop) are excluded from `getHeightAt`, so
+  floaters track the swell and big waves, not ripples.
+- **Crest spray is deliberately sparse** — visible puffs at breaking crests in
+  rough/storm, not the rain-lashed white-out of a hurricane reference frame (no rain).
 - **SwiftShader interactive rate requires the `low` tier** (~8 fps at 640×360 in the
   verification container); `medium`/`high` are meant for real GPUs.
