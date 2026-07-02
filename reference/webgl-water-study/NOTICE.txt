@@ -1,0 +1,1 @@
+STUDY ONLY — no license granted; reimplement the technique in TSL, do not copy code.
