@@ -3,12 +3,34 @@
 // returns two RGBA float grids per step:
 //   dispA: [λ·Dx, height, λ·Dz, jacobian]
 //   normB: [nx, ny, nz, persistentFoam]
+// The foam channel is a real simulation: injected at Jacobian folds,
+// advected semi-Lagrangian by the surface horizontal velocity (finite
+// difference of the displacement field) plus a downwind drift, decaying
+// over seconds.
 import { makePlan, ifft2d } from './fft.js';
-import { buildInitialSpectrum } from './spectrum.js';
+import { buildInitialSpectrum, makeRandom } from './spectrum.js';
 
 let N = 0;
 let plan = null;
 let state = null;
+
+/** Bilinear wrapped gather from a scalar N×N field. */
+function sampleWrap(arr, u, v) {
+  u -= Math.floor(u / N) * N;
+  v -= Math.floor(v / N) * N;
+  let i0 = Math.floor(u) % N;
+  let j0 = Math.floor(v) % N;
+  const fu = u - Math.floor(u);
+  const fv = v - Math.floor(v);
+  const i1 = (i0 + 1) % N;
+  const j1 = (j0 + 1) % N;
+  return (
+    arr[j0 * N + i0] * (1 - fu) * (1 - fv) +
+    arr[j0 * N + i1] * fu * (1 - fv) +
+    arr[j1 * N + i0] * (1 - fu) * fv +
+    arr[j1 * N + i1] * fu * fv
+  );
+}
 
 function init(options) {
   N = options.N;
@@ -53,6 +75,12 @@ function init(options) {
     }
   }
 
+  // Static per-texel injection dither: whitecap events are patchy in
+  // reality; uniform J-band injection reads as painted stripes.
+  const rng = makeRandom((options.seed ?? 1337) ^ 0x5f0a);
+  const dither = new Float32Array(N * N);
+  for (let i = 0; i < N * N; i++) dither[i] = 0.55 + 0.9 * rng.uniform();
+
   state = {
     options,
     h0,
@@ -61,12 +89,17 @@ function init(options) {
     F,
     grids: [0, 1, 2, 3].map(() => new Float32Array(2 * N * N)),
     foam: new Float32Array(N * N),
+    foamNext: new Float32Array(N * N),
+    prevDx: new Float32Array(N * N),
+    prevDz: new Float32Array(N * N),
+    hasPrev: false,
+    dither,
     pool: [],
   };
 }
 
 function step(t, dt, recycled) {
-  const { h0, h0mConj, omega, F, grids, foam, options } = state;
+  const { h0, h0mConj, omega, F, grids, options } = state;
   const NN = N * N;
   const lambda = options.choppiness ?? 1.2;
   const [g1, g2, g3, g4] = grids;
@@ -96,10 +129,51 @@ function step(t, dt, recycled) {
   ifft2d(plan, g3);
   ifft2d(plan, g4);
 
+  // ---- Foam advection (before injection): carry the accumulated field
+  // along the surface horizontal velocity. Velocity = finite difference of
+  // λ·D between steps (the material flow that stretches/converges foam),
+  // plus a downwind drift (real foam streams at ~3% of wind speed).
+  {
+    const { foam, foamNext, prevDx, prevDz } = state;
+    const dtSafe = Math.max(dt, 1e-3);
+    const advGain = options.foamAdvect ?? 1.0;
+    const drift = (options.foamDrift ?? 0.03) * (options.windSpeed ?? 8);
+    const wdir = options.windDirection ?? 0;
+    const driftX = Math.cos(wdir) * drift;
+    const driftZ = Math.sin(wdir) * drift;
+    const toTexel = N / options.tileSize;
+    if (state.hasPrev && advGain > 0) {
+      for (let idx = 0; idx < NN; idx++) {
+        const i2 = idx * 2;
+        const Dx = lambda * g1[i2 + 1];
+        const Dz = lambda * g2[i2];
+        // Clamp the orbital term: preset/time jumps otherwise teleport foam.
+        let vx = Math.max(-6, Math.min(6, (Dx - prevDx[idx]) / dtSafe)) * advGain + driftX;
+        let vz = Math.max(-6, Math.min(6, (Dz - prevDz[idx]) / dtSafe)) * advGain + driftZ;
+        prevDx[idx] = Dx;
+        prevDz[idx] = Dz;
+        const i = idx % N;
+        const j = (idx / N) | 0;
+        foamNext[idx] = sampleWrap(foam, i - vx * dt * toTexel, j - vz * dt * toTexel);
+      }
+      state.foam = foamNext;
+      state.foamNext = foam;
+    } else {
+      for (let idx = 0; idx < NN; idx++) {
+        const i2 = idx * 2;
+        prevDx[idx] = lambda * g1[i2 + 1];
+        prevDz[idx] = lambda * g2[i2];
+      }
+      state.hasPrev = true;
+    }
+  }
+
+  const foam = state.foam;
+  const dither = state.dither;
   const dispA = recycled?.[0]?.length === NN * 4 ? recycled[0] : new Float32Array(NN * 4);
   const normB = recycled?.[1]?.length === NN * 4 ? recycled[1] : new Float32Array(NN * 4);
 
-  const foamDecay = Math.exp(-dt / (options.foamDecay ?? 4.0));
+  const foamDecay = Math.exp(-dt / (options.foamDecay ?? 5.0));
   const foamBias = options.foamBias ?? 0.65; // J below this injects foam
   const foamGain = options.foamGain ?? 6.0;
 
@@ -119,10 +193,13 @@ function step(t, dt, recycled) {
     const jxz = lambda * dDxdz;
     const J = jxx * jzz - jxz * jxz;
 
-    // Persistent foam: exponential decay + injection where the surface folds.
+    // Persistent foam: exponential decay + dithered injection where the
+    // surface folds (advection already applied above). Injection is
+    // logistic (∝ 1−f): mats approach saturation softly instead of slamming
+    // whole fold zones to solid white.
     let f = foam[idx] * foamDecay;
-    const inj = Math.max(0, foamBias - J) * foamGain * dt;
-    f = Math.min(1, f + inj);
+    const inj = Math.max(0, foamBias - J) * foamGain * dt * dither[idx];
+    f = Math.min(1, f + inj * (1 - f));
     foam[idx] = f;
 
     // Slopes corrected for horizontal displacement compression.

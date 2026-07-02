@@ -1,0 +1,12 @@
+[
+  {
+    "name": "q2-closeup",
+    "params": "scenario=ocean&preset=storm&fixeddt=1&dt=0.25&seed=1337&seabed=0&lighthouse=0&crate=0&buoy=0&cam=0,11,0&look=10,0,-16&sunaz=305&hud=0",
+    "width": 960,
+    "height": 540,
+    "captures": [
+      { "untilSimTime": 13.5, "out": "shots/q2-closeup-a.png" },
+      { "untilSimTime": 15.5, "out": "shots/q2-closeup-b.png" }
+    ]
+  }
+]

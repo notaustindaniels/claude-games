@@ -1,0 +1,16 @@
+[
+  {
+    "name": "q2-storm-foam",
+    "params": "scenario=ocean&preset=storm&fixeddt=1&dt=0.25&seed=1337&seabed=0&lighthouse=0&crate=0&buoy=0&cam=0,24,0&look=20,0,-40&sunaz=305&label=Q2+storm+foam+ON",
+    "width": 960,
+    "height": 540,
+    "captures": [{ "untilSimTime": 16, "out": "shots/q2-storm-on.png" }]
+  },
+  {
+    "name": "q2-storm-nofoam",
+    "params": "scenario=ocean&preset=storm&fixeddt=1&dt=0.25&seed=1337&seabed=0&lighthouse=0&crate=0&buoy=0&cam=0,24,0&look=20,0,-40&sunaz=305&foamgain=0&ambfoam=0&label=Q2+storm+foam+OFF",
+    "width": 960,
+    "height": 540,
+    "captures": [{ "untilSimTime": 16, "out": "shots/q2-storm-off.png" }]
+  }
+]

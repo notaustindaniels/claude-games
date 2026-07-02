@@ -9,7 +9,7 @@ export const PRESETS = {
     sim: {
       tileSize: 96, windSpeed: 1.6, windDirection: 15, fetch: 30000,
       choppiness: 0.6, directionality: 4, smallWaveCutoff: 0.004,
-      amplitudeScale: 0.8, foamGain: 0, foamBias: 0.4, foamDecay: 3,
+      amplitudeScale: 0.8, foamGain: 0, foamBias: 0.4, foamDecay: 4,
     },
     swell: [{ amplitude: 0.06, wavelength: 90, direction: 40, steepness: 0.25 }],
     secondary: { scale: 3.17, weight: 0.35 },
@@ -29,7 +29,7 @@ export const PRESETS = {
     sim: {
       tileSize: 128, windSpeed: 4, windDirection: 20, fetch: 80000,
       choppiness: 0.85, directionality: 6, smallWaveCutoff: 0.005,
-      amplitudeScale: 1, foamGain: 0.5, foamBias: 0.35, foamDecay: 3,
+      amplitudeScale: 1, foamGain: 0.5, foamBias: 0.35, foamDecay: 4,
     },
     swell: [{ amplitude: 0.28, wavelength: 110, direction: 45, steepness: 0.4 }],
     secondary: { scale: 3.17, weight: 0.4 },
@@ -49,7 +49,7 @@ export const PRESETS = {
     sim: {
       tileSize: 180, windSpeed: 7.5, windDirection: 25, fetch: 150000,
       choppiness: 1.1, directionality: 7, smallWaveCutoff: 0.006,
-      amplitudeScale: 1, foamGain: 1.6, foamBias: 0.4, foamDecay: 3.5,
+      amplitudeScale: 1, foamGain: 1.6, foamBias: 0.4, foamDecay: 4.5,
     },
     swell: [{ amplitude: 0.55, wavelength: 140, direction: 50, steepness: 0.45 }],
     secondary: { scale: 3.17, weight: 0.45 },
@@ -69,7 +69,7 @@ export const PRESETS = {
     sim: {
       tileSize: 256, windSpeed: 10.5, windDirection: 30, fetch: 300000,
       choppiness: 1.25, directionality: 8, smallWaveCutoff: 0.008,
-      amplitudeScale: 1, foamGain: 2.2, foamBias: 0.45, foamDecay: 4.5,
+      amplitudeScale: 1, foamGain: 8, foamBias: 0.54, foamDecay: 5,
     },
     swell: [
       { amplitude: 0.9, wavelength: 170, direction: 55, steepness: 0.5 },
@@ -92,7 +92,7 @@ export const PRESETS = {
     sim: {
       tileSize: 320, windSpeed: 15, windDirection: 35, fetch: 400000,
       choppiness: 1.45, directionality: 6, smallWaveCutoff: 0.01,
-      amplitudeScale: 1, foamGain: 2.8, foamBias: 0.5, foamDecay: 6,
+      amplitudeScale: 1, foamGain: 10, foamBias: 0.6, foamDecay: 6.5,
     },
     swell: [
       { amplitude: 1.7, wavelength: 220, direction: 60, steepness: 0.55 },
@@ -115,7 +115,7 @@ export const PRESETS = {
     sim: {
       tileSize: 420, windSpeed: 21, windDirection: 40, fetch: 500000,
       choppiness: 1.6, directionality: 5, smallWaveCutoff: 0.012,
-      amplitudeScale: 1.05, foamGain: 3.5, foamBias: 0.55, foamDecay: 8,
+      amplitudeScale: 1.05, foamGain: 13, foamBias: 0.62, foamDecay: 8,
     },
     swell: [
       { amplitude: 2.6, wavelength: 280, direction: 65, steepness: 0.6 },
@@ -138,7 +138,7 @@ export const PRESETS = {
     sim: {
       tileSize: 160, windSpeed: 5.5, windDirection: 10, fetch: 120000,
       choppiness: 1.0, directionality: 6, smallWaveCutoff: 0.005,
-      amplitudeScale: 1, foamGain: 1.2, foamBias: 0.45, foamDecay: 3.5,
+      amplitudeScale: 1, foamGain: 1.2, foamBias: 0.45, foamDecay: 4.5,
     },
     swell: [{ amplitude: 0.45, wavelength: 130, direction: 30, steepness: 0.45 }],
     secondary: { scale: 3.17, weight: 0.42 },

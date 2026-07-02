@@ -35,6 +35,8 @@ export function makeOceanUniforms(cfg) {
     zenith: uniform(new THREE.Color(cfg.sky.zenith)),
     horizon: uniform(new THREE.Color(cfg.sky.horizon)),
     haze: uniform(new THREE.Color(cfg.sky.haze)),
+    // Wind (unit vector, for foam streak anisotropy).
+    windDir: uniform(new THREE.Vector2(1, 0)),
     // Water body.
     absorption: uniform(new THREE.Vector3(...w.absorption)),
     scatterColor: uniform(new THREE.Color(w.scatterColor)),
@@ -67,6 +69,10 @@ export function makeOceanUniforms(cfg) {
 /** Push preset-derived values into the uniform bag (swell in sim form). */
 export function applyConfigToUniforms(u, cfg, swellSim) {
   const w = cfg.water;
+  u.windDir.value.set(
+    Math.cos(cfg.sim.windDirectionRad ?? 0),
+    Math.sin(cfg.sim.windDirectionRad ?? 0)
+  );
   u.tileSize.value = cfg.sim.tileSize;
   u.secScale.value = cfg.secondary.scale;
   u.secAmp.value = cfg.secondary.weight * cfg.secondary.scale * 0.5;
@@ -112,6 +118,7 @@ export function makeOceanMaterial(u, deps) {
   const dispTex = texture(sim.dispTexture);
   const normTex = texture(sim.normTexture);
   const seabedTex = seabedTexture ? texture(seabedTexture) : null;
+  const laceTex = deps.laceTexture ? texture(deps.laceTexture) : null;
 
   const material = new THREE.MeshBasicNodeMaterial({ fog: false });
   material.side = THREE.DoubleSide;
@@ -252,9 +259,19 @@ export function makeOceanMaterial(u, deps) {
     const V = normalize(cameraPosition.sub(vWorldPos));
     const NdotV = saturate(dot(nUp, V));
 
-    // Foam mask: persistent sim foam + ambient noise foam + shoreline contact.
-    const foamSim = normTex.sample(wxz.div(u.tileSize)).w
-      .add(normTex.sample(secUV(wxz)).w.mul(0.45));
+    // Foam amount: advected persistent sim foam (primary tile only — the
+    // stretched ghost sample is gone; the lace texture supplies fine scale)
+    // + ambient windrow foam + shoreline contact band.
+    // The float foam field has no mips on the fallback backend and advection
+    // writes texel-scale structure into it, so a single sample speckles once
+    // the pixel footprint reaches the texel: take a 4-tap diagonal box blur
+    // scaled by footprint (a manual mip).
+    const foamBlurR = footprint.mul(0.4).add(u.fftTexel.mul(0.25));
+    const foamSim = normTex.sample(wxz.add(vec2(foamBlurR, foamBlurR)).div(u.tileSize)).w
+      .add(normTex.sample(wxz.add(vec2(foamBlurR.negate(), foamBlurR)).div(u.tileSize)).w)
+      .add(normTex.sample(wxz.add(vec2(foamBlurR, foamBlurR.negate())).div(u.tileSize)).w)
+      .add(normTex.sample(wxz.add(vec2(foamBlurR.negate(), foamBlurR.negate())).div(u.tileSize)).w)
+      .mul(0.25);
     let ambFoam = float(0);
     if (!lite) {
       const ambPat = mx_noise_float(vec3(wxz.mul(0.055), u.time.mul(0.05)))
@@ -270,14 +287,50 @@ export function makeOceanMaterial(u, deps) {
     const contactFoam = oneMinus(smoothstep(float(0), u.contactFoamDepth, waterDepth))
       .mul(contactNoise.mul(0.7).add(contactPulse.mul(0.5)))
       .mul(1.4);
-    const foamRaw = saturate(foamSim.add(ambFoam).add(contactFoam)).mul(oneMinus(detailKill));
-    // Fine pattern so foam reads as texture, not paint.
-    const foamPat = lite
-      ? float(0.5)
-      : mx_noise_float(vec3(wxz.mul(1.4), u.time.mul(0.3))).mul(0.5).add(0.5);
-    const foam = saturate(foamRaw.mul(foamPat.mul(0.6).add(0.55)).mul(1.25)).mul(
-      smoothstep(float(0.06), float(0.5), foamRaw)
-    );
+    // The foam field texture has no mips on the fallback backend; fade it
+    // out once the pixel footprint exceeds its texel (later than the normal
+    // detail kill — foam blobs are metres wide and survive further).
+    const foamKill = smoothstep(u.fftTexel.mul(1.5), u.fftTexel.mul(8.0), footprint);
+    // Shape the field: cut the low-value haze that advection smears across
+    // whole convergence bands (it binarizes into dust), keep the mat cores.
+    const foamShaped = saturate(foamSim.mul(1.3).sub(0.09));
+    const foamAmt = saturate(foamShaped.add(contactFoam)).mul(oneMinus(foamKill));
+
+    // Lace coverage: threshold the breakup texture by foam amount, so a
+    // saturated mat is solid-with-holes, and decaying/stretching foam tears
+    // into a connected filament web (matches the reference foam structure).
+    // Ambient windrow foam stays SOFT (translucent streaks) — thresholding
+    // its low values binarizes into speckle dust.
+    let foam;
+    let foamShade = float(1);
+    if (laceTex) {
+      // Anisotropic lace UVs: real foam streaks elongate along the wind
+      // (windrows, stretched mats), so stretch the pattern 2.3× along it.
+      const wd = u.windDir;
+      const laceP = vec2(
+        wxz.x.mul(wd.x).add(wxz.y.mul(wd.y)).div(2.3),
+        wxz.y.mul(wd.x).sub(wxz.x.mul(wd.y))
+      );
+      const lace1 = laceTex.sample(laceP.div(3.1)).r;
+      const lace2 = laceTex.sample(laceP.div(11.9).add(vec2(0.37, 0.11))).r;
+      const coarse = laceTex.sample(laceP.div(29.0).add(vec2(0.71, 0.53))).g;
+      // Near-field centimetre bubbles, blended in only while resolvable.
+      const lace0 = laceTex.sample(laceP.div(1.05).add(vec2(0.83, 0.29))).r;
+      const fineW = oneMinus(smoothstep(float(0.012), float(0.06), footprint)).mul(0.38);
+      const laceBase = lace1.mul(0.58).add(lace2.mul(0.42));
+      const lace = laceBase.mul(oneMinus(fineW)).add(lace0.mul(fineW))
+        .add(coarse.sub(0.5).mul(0.16));
+      const th = oneMinus(foamAmt).mul(0.92);
+      const cov = smoothstep(th, th.add(0.17), lace);
+      const laced = cov.mul(smoothstep(float(0.05), float(0.16), foamAmt));
+      const ambient = ambFoam.mul(lace.mul(0.5).add(0.35)).mul(oneMinus(detailKill.mul(0.7)));
+      foam = max(laced, saturate(ambient));
+      // Bubble-scale shading: holes read slightly darker than the film.
+      foamShade = mix(float(0.76), float(1.04), lace).add(foamAmt.mul(0.05));
+    } else {
+      foam = saturate(foamAmt.add(ambFoam).mul(1.1))
+        .mul(smoothstep(float(0.05), float(0.4), foamAmt.add(ambFoam)));
+    }
 
     // Fresnel (Schlick, F0 = 0.02). Stays smooth at distance because the
     // slopes feeding nUp are already flattened by detailKill.
@@ -330,8 +383,19 @@ export function makeOceanMaterial(u, deps) {
     const spec = u.sunColor.mul(D.mul(FH).mul(NdotL).mul(0.25).mul(u.sunIntensity));
 
     // Compose (above-water).
-    const water = mix(bodyColor.add(sss), reflColor, fres.mul(u.reflectionStrength));
-    const foamLight = u.foamColor.mul(NdotL.mul(0.85).add(0.35)).mul(max(u.sunIntensity, 0.4));
+    let water = mix(bodyColor.add(sss), reflColor, fres.mul(u.reflectionStrength));
+    if (laceTex) {
+      // Translucent foam film: where foam amount exists but the lace mat has
+      // torn away, the surface keeps a milky green-white stain (the
+      // reference foam always shows this stage between mat and clear water).
+      const film = smoothstep(float(0.05), float(0.5), foamAmt)
+        .mul(oneMinus(foam)).mul(0.34);
+      const filmColor = u.foamColor.mul(vec3(0.8, 0.92, 0.96))
+        .mul(NdotL.mul(0.6).add(0.4)).mul(max(u.sunIntensity, 0.4));
+      water = mix(water, filmColor, film);
+    }
+    const foamLight = u.foamColor.mul(foamShade)
+      .mul(NdotL.mul(0.85).add(0.35)).mul(max(u.sunIntensity, 0.4));
     const above = mix(water, foamLight, foam).add(spec.mul(oneMinus(foam)));
 
     // Underside (camera underwater looking up at the surface).

@@ -1,0 +1,16 @@
+[
+  {
+    "name": "q2-time-strip",
+    "params": "scenario=ocean&preset=storm&fixeddt=1&dt=0.25&seed=1337&seabed=0&lighthouse=0&crate=0&buoy=0&cam=0,34,0&look=3,0,-3&sunaz=305&hud=0",
+    "width": 960,
+    "height": 720,
+    "captures": [
+      { "untilSimTime": 10, "out": "shots/q2-seq-a.png" },
+      { "untilSimTime": 11.75, "out": "shots/q2-seq-b.png" },
+      { "untilSimTime": 13.5, "out": "shots/q2-seq-c.png" },
+      { "untilSimTime": 15.25, "out": "shots/q2-seq-d.png" },
+      { "untilSimTime": 17, "out": "shots/q2-seq-e.png" },
+      { "untilSimTime": 19, "out": "shots/q2-seq-f.png" }
+    ]
+  }
+]

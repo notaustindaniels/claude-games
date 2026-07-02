@@ -4,6 +4,7 @@ import * as THREE from 'three/webgpu';
 import { OceanSim } from './OceanSim.js';
 import { makeSurfaceGeometry } from './OceanSurface.js';
 import { makeOceanUniforms, makeOceanMaterial, applyConfigToUniforms } from './OceanMaterial.js';
+import { foamLaceData } from './foamlace.js';
 import { makeSkyColorFn, makeSkyDome } from './sky.js';
 import { makeUnderwaterOverlay, makeUnderwaterFogWrapper } from './underwater.js';
 import { makeSunShafts } from './sunshafts.js';
@@ -90,12 +91,25 @@ export async function createOcean(options = {}) {
     u.seabedDeep.value = options.seabed.deepY ?? -45;
   }
 
+  // Foam breakup ("lace") texture: tileable, mipmapped, shared by all foam
+  // layers so mats and shoreline foam tear the same way.
+  const laceTexture = new THREE.DataTexture(
+    foamLaceData(256, 9001), 256, 256, THREE.RGBAFormat, THREE.UnsignedByteType
+  );
+  laceTexture.wrapS = laceTexture.wrapT = THREE.RepeatWrapping;
+  laceTexture.magFilter = THREE.LinearFilter;
+  laceTexture.minFilter = THREE.LinearMipmapLinearFilter;
+  laceTexture.generateMipmaps = true;
+  laceTexture.colorSpace = THREE.NoColorSpace;
+  laceTexture.needsUpdate = true;
+
   const reflectionEnabled = (options.reflections ?? true) && quality.reflection;
   let reflectorTarget = null;
   const material = makeOceanMaterial(u, {
     sim,
     skyColorFn,
     seabedTexture: options.seabed?.texture ?? null,
+    laceTexture,
     lite: (options.quality ?? 'medium') === 'low',
     reflection: reflectionEnabled
       ? {

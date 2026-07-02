@@ -126,5 +126,29 @@
   user camera or preset switcher. Plan follows QUALITY.md priority: Q2 &gt; Q3 &gt; Q1 &gt; Q4 &gt; Q6 &gt; Q5.</div>
 </div>
 
+<div class="entry" id="q-pass-2">
+  <h2>Q-Pass 2 — 2026-07-02 — Q2: advected persistent foam (sim + lacy shading)</h2>
+  <p><strong>What changed:</strong> Foam is now a simulation, not a mask. Worker: semi-Lagrangian advection of the foam
+  field each step by the surface horizontal velocity (finite difference of λ·D between steps, clamped) plus a ~3%-of-wind
+  downwind drift; injection at Jacobian folds is per-texel dithered and logistic (∝ 1−f) so mats saturate softly instead
+  of slamming whole fold zones white; decay 4–8&nbsp;s by preset. Shading: the foam amount thresholds a tileable
+  bubble-wall + Voronoi-crack "lace" texture (generated procedurally, mipmapped, sampled at 1/3/12/29&nbsp;m scales with
+  wind-anisotropic UVs stretched 2.3×) — a saturated mat reads solid-with-holes and tears into a connected filament web
+  as it decays/stretches; below the mat a translucent green-white film stain remains (visible in every reference foam
+  still). The old secondary-tile foam ghost sample and per-pixel noise foam are gone; a footprint-scaled 4-tap blur
+  stands in for the missing float-texture mips.</p>
+  <div class="shots">
+    <figure><img src="shots/q2-foam-lifecycle.png" alt="foam lifecycle strip" /><figcaption>shots/q2-foam-lifecycle.png — same nadir window, storm preset, t = 11.75 / 13.5 / 15.25 / 19&nbsp;s: patch born at a crest, stretched downwind and torn, faded to wisps</figcaption></figure>
+    <figure><img src="shots/q2-foam-vs-ref.png" alt="ours vs reference foam" /><figcaption>shots/q2-foam-vs-ref.png — ours (left) vs reference foam (right, ref_26)</figcaption></figure>
+  </div>
+  <div class="honest"><strong>Honest assessment vs reference:</strong> Mats now read as connected lacy structures that
+  are born at crests, stretch, and tear — the strip proves the full lifecycle and the film stain matches the reference's
+  translucent stage. Still short of the reference: (1) reference bubbles are finer and denser (ours bottom out ~5&nbsp;cm;
+  ref_26 shows 1–2&nbsp;cm bubble grain even mid-mat); (2) reference mats hug the crest line more tightly — ours sprawl
+  wider because a single 420&nbsp;m storm tile folds in broad zones (Q1 cascades should localize this); (3) the
+  mid-distance water behind the foam is polluted by specular glitter speckle unrelated to foam (visible top of the
+  closeup) — a Q4/Q5-adjacent tell tracked separately.</div>
+</div>
+
 </body>
 </html>

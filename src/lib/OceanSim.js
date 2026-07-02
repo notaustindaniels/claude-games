@@ -70,6 +70,8 @@ export class OceanSim {
       foamDecay: o.foamDecay,
       foamBias: o.foamBias,
       foamGain: o.foamGain,
+      foamAdvect: o.foamAdvect,
+      foamDrift: o.foamDrift,
     };
   }
 
