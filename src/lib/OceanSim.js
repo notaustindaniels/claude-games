@@ -72,6 +72,8 @@ export class OceanSim {
       foamGain: o.foamGain,
       foamAdvect: o.foamAdvect,
       foamDrift: o.foamDrift,
+      bandMinLambda: o.bandMinLambda,
+      bandMaxLambda: o.bandMaxLambda,
     };
   }
 

@@ -1,0 +1,9 @@
+[
+  {
+    "name": "q1-gpu-fft-verify",
+    "params": "scenario=gpusim&fixeddt=1&dt=0.25&seed=1337",
+    "width": 900,
+    "height": 500,
+    "captures": [{ "untilFrames": 14, "out": "shots/q1-gpusim-verify.png" }]
+  }
+]

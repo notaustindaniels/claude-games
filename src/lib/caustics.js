@@ -169,8 +169,11 @@ export function makeCausticsPass({ sim, mapSize = 768, gridSegments = 256, regio
   const vOld = varying(oldPos.xz);
   const vNew = varying(newPos.xz);
 
+  // The backend writes render targets row-flipped relative to sampling
+  // conventions (proven by the GPU-FFT chain probes) — negate clip-space y
+  // so the map's rows match the sampler's uv mapping.
   const ndc = newPos.xz.sub(cu.regionCenter).div(mapHalf);
-  mat.vertexNode = vec4(ndc.x, ndc.y, 0, 1);
+  mat.vertexNode = vec4(ndc.x, ndc.y.negate(), 0, 1);
 
   mat.colorNode = Fn(() => {
     // Ratio of the reference (flat-surface) footprint to the true refracted

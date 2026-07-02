@@ -24,6 +24,7 @@ window.addEventListener('unhandledrejection', (e) => {
 const SCENARIOS = {
   cube: () => import('./scenarios/cube.js'),
   ocean: () => import('./scenarios/ocean.js'),
+  gpusim: () => import('./scenarios/gpusim.js'),
 };
 
 async function start() {

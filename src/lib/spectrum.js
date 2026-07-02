@@ -5,6 +5,11 @@
 
 const G = 9.81;
 
+function smooth01(x) {
+  const t = Math.min(1, Math.max(0, x));
+  return t * t * (3 - 2 * t);
+}
+
 /** Deterministic PRNG (mulberry32) + Box-Muller gaussian pairs. */
 export function makeRandom(seed) {
   let a = seed >>> 0;
@@ -83,6 +88,11 @@ export function buildInitialSpectrum(opts) {
     directionality = 8, // cos-power sharpness
     smallWaveCutoff = 0.01, // metres; suppress sub-texel chop
     amplitudeScale = 1,
+    // Cascade band limits (wavelength, metres): energy outside
+    // (bandMinLambda, bandMaxLambda] is excluded, with ~12% feather, so
+    // multiple cascades partition the spectrum without double counting.
+    bandMinLambda = 0,
+    bandMaxLambda = Infinity,
   } = opts;
 
   const rng = makeRandom(seed);
@@ -128,6 +138,13 @@ export function buildInitialSpectrum(opts) {
       energy *= spreading(theta, windDirection, directionality) / spreadNorm;
       // Suppress waves shorter than the cutoff (and hence texel aliasing).
       energy *= Math.exp(-k * k * smallWaveCutoff * smallWaveCutoff);
+      // Cascade band partition (smooth ~12% feather at each edge).
+      if (bandMinLambda > 0 || bandMaxLambda < Infinity) {
+        const lambda = (2 * Math.PI) / k;
+        const fadeIn = smooth01((bandMaxLambda - lambda) / (bandMaxLambda * 0.12));
+        const fadeOut = smooth01((lambda - bandMinLambda) / (bandMinLambda * 0.12 + 1e-9));
+        energy *= (bandMaxLambda < Infinity ? fadeIn : 1) * (bandMinLambda > 0 ? fadeOut : 1);
+      }
       // Discrete amplitude chosen so E[|h~(k,t)|²] = E(k)·Δk² and the summed
       // variance matches the spectrum integral (h~ sums ±k contributions).
       const amp = Math.sqrt(Math.max(energy * dk * dk, 0) / 2) * amplitudeScale;
