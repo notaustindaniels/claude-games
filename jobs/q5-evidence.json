@@ -1,0 +1,12 @@
+[
+  {
+    "name": "q5-storm-spray",
+    "params": "scenario=ocean&preset=storm&fixeddt=1&dt=0.25&seed=1337&seabed=0&lighthouse=0&crate=0&buoy=0&cam=0,12,0&look=20,6,-38&hud=0",
+    "width": 960,
+    "height": 540,
+    "captures": [
+      { "untilSimTime": 12, "out": "shots/q5-storm-a.png" },
+      { "untilSimTime": 15, "out": "shots/q5-storm-b.png" }
+    ]
+  }
+]

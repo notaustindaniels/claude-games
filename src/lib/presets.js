@@ -18,6 +18,8 @@ export const PRESETS = {
       sssColor: 0x1a7f8a, sssStrength: 0.25, roughness: 0.035,
       detailNormal: 0.12, ambientFoam: 0, contactFoamDepth: 0.6,
     },
+    spray: 0,
+    fog: [1800, 9000],
     sky: {
       turbidity: 1.6, sunElevation: 24, sunAzimuth: 135, sunIntensity: 1.0,
       zenith: 0x2c5f9e, horizon: 0xc7dcec, haze: 0xe4ecf2,
@@ -38,6 +40,8 @@ export const PRESETS = {
       sssColor: 0x1d8a90, sssStrength: 0.4, roughness: 0.05,
       detailNormal: 0.22, ambientFoam: 0.02, contactFoamDepth: 0.9,
     },
+    spray: 0,
+    fog: [1400, 8000],
     sky: {
       turbidity: 2, sunElevation: 38, sunAzimuth: 140, sunIntensity: 1.0,
       zenith: 0x2a62a8, horizon: 0xbcd6e8, haze: 0xdfeaf1,
@@ -58,6 +62,8 @@ export const PRESETS = {
       sssColor: 0x1f9490, sssStrength: 0.45, roughness: 0.07,
       detailNormal: 0.3, ambientFoam: 0.03, contactFoamDepth: 1.2,
     },
+    spray: 0.08,
+    fog: [1000, 7000],
     sky: {
       turbidity: 2.4, sunElevation: 46, sunAzimuth: 150, sunIntensity: 1.05,
       zenith: 0x2b5f9c, horizon: 0xb5cfe2, haze: 0xd8e4ee,
@@ -81,6 +87,8 @@ export const PRESETS = {
       sssColor: 0x27a08e, sssStrength: 0.5, roughness: 0.085,
       detailNormal: 0.34, ambientFoam: 0.05, contactFoamDepth: 1.6,
     },
+    spray: 0.18,
+    fog: [800, 6000],
     sky: {
       turbidity: 3, sunElevation: 42, sunAzimuth: 155, sunIntensity: 1.05,
       zenith: 0x33689f, horizon: 0xafc6d8, haze: 0xcfdde8,
@@ -104,6 +112,8 @@ export const PRESETS = {
       sssColor: 0x2fa88c, sssStrength: 0.6, roughness: 0.11,
       detailNormal: 0.38, ambientFoam: 0.09, contactFoamDepth: 2.2,
     },
+    spray: 0.55,
+    fog: [500, 4200],
     sky: {
       turbidity: 5, sunElevation: 32, sunAzimuth: 160, sunIntensity: 0.95,
       zenith: 0x4a6e8e, horizon: 0xa8b8c4, haze: 0xc2ccd4,
@@ -127,6 +137,8 @@ export const PRESETS = {
       sssColor: 0x3aa584, sssStrength: 0.65, roughness: 0.14,
       detailNormal: 0.42, ambientFoam: 0.14, contactFoamDepth: 3,
     },
+    spray: 1.0,
+    fog: [260, 2400],
     sky: {
       turbidity: 9, sunElevation: 22, sunAzimuth: 165, sunIntensity: 0.7,
       zenith: 0x5c6d7a, horizon: 0x93a0a8, haze: 0xaab4ba,
@@ -147,6 +159,8 @@ export const PRESETS = {
       sssColor: 0x2b8a7c, sssStrength: 0.5, roughness: 0.055,
       detailNormal: 0.24, ambientFoam: 0.04, contactFoamDepth: 1.0,
     },
+    spray: 0.05,
+    fog: [900, 6500],
     sky: {
       turbidity: 4, sunElevation: 6, sunAzimuth: 195, sunIntensity: 0.85,
       zenith: 0x35507c, horizon: 0xf2b170, haze: 0xf7cf9a,
@@ -162,6 +176,8 @@ export function resolvePreset(name = 'moderate', overrides = {}) {
   if (!base) throw new Error(`Unknown ocean preset "${name}" (have: ${PRESET_NAMES.join(', ')})`);
   const merged = {
     name,
+    spray: overrides.spray ?? base.spray ?? 0,
+    fog: overrides.fog ?? base.fog ?? [2500, 9000],
     sim: { ...base.sim, ...(overrides.sim || {}) },
     swell: overrides.swell ?? base.swell,
     secondary: { ...base.secondary, ...(overrides.secondary || {}) },

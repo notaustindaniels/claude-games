@@ -257,5 +257,37 @@
   few hundred ms while spectra rebuild (the reference appears to crossfade).</div>
 </div>
 
+<div class="entry" id="q-pass-7">
+  <h2>Q-Pass 7 — 2026-07-02 — Q5: GPU crest spray + horizon aerial perspective</h2>
+  <p><strong>What changed:</strong> New <code>src/lib/spray.js</code> — a stateless GPU particle system that runs
+  entirely in the vertex stage (works on the WebGL2 fallback, no compute). Each of 7000 points hashes its own respawn
+  cycle from (index, cycle counter); at cycle start it picks a seed point in a camera-local region, samples the two
+  structural cascades' Jacobians there, and only materializes where the surface is actually breaking
+  (<code>J = min(J0, J1·1.1)</code> below threshold), with a per-particle lottery scaled by the preset's
+  <code>spray</code> intensity (storm 1.0 → glassy 0). Live particles fly ballistically: up + downwind kick, gravity,
+  growing puff sprite, fading alpha. The seed region is quantized to an 8 m grid and anchored 55 m AHEAD of the camera
+  — the original camera-centered anchor wasted half the particles behind the viewer, which is why earlier attempts
+  looked empty. Gate calibration came from measured Jacobian statistics (<code>?fieldprobe=1</code> reports J min/max
+  and percent-below-threshold; storm: j0 min ≈ 0.46, only 1.7% of texels below 0.66 — so the gate opens at 0.85 with a
+  0.3-wide ramp), and <code>?spraydebug=1</code> (gate bypass) proved the particle mechanics independently of the gate.
+  Horizon aerial perspective is now preset-driven: each preset carries a fog band (glassy [1800, 9000] → storm
+  [260, 2400]) so the storm sea dissolves into grey murk near the horizon like the reference's, instead of one global
+  haze for all weathers.</p>
+  <div class="shots">
+    <figure><img src="shots/q5-storm-vs-ref.png" alt="storm vs ref_07" /><figcaption>shots/q5-storm-vs-ref.png — our storm (left: breaking crest with spray speckles, horizon dissolving to grey) vs ref_07 rain-lashed storm sea</figcaption></figure>
+    <figure><img src="shots/q5-spray-zoom.png" alt="spray zoom, two frames" /><figcaption>shots/q5-spray-zoom.png — crest crops from two frames 3 s apart: discrete particle bursts trail downwind off the foam-capped crests</figcaption></figure>
+    <figure><img src="shots/q5-storm-a.png" alt="storm frame A" /><figcaption>shots/q5-storm-a.png — full storm frame (t=12): preset fog band pulls the sea into the grey sky at range</figcaption></figure>
+    <figure><img src="shots/q5-spray-debug.png" alt="gate-bypass debug" /><figcaption>shots/q5-spray-debug.png — ?spraydebug=1 gate bypass: the emitter field itself, proving spawn/ballistics/sprite pipeline</figcaption></figure>
+  </div>
+  <div class="honest"><strong>Honest assessment vs reference:</strong> Spray particles emit exactly where crests break
+  (the zoom shows bursts rooted at the foam caps, drifting downwind) and the storm horizon dissolves into the same
+  flat grey as ref_07. Still short of the reference: (1) ref_07 is rain-lashed — dense white streak tracery fills the
+  whole frame; we render no rain at all, so our air is far cleaner than the reference storm's; (2) at full-frame scale
+  our spray reads as faint speckle bursts near crests — you need the zoom crop to see individual particles, whereas
+  the reference's spray reads instantly; (3) the reference's storm sea is churned white with wind-streaked foam almost
+  everywhere — ours keeps distinct foam patches on a cleaner sea; (4) our haze keeps a faintly visible horizon line
+  where ref_07's sea/sky boundary is fully swallowed.</div>
+</div>
+
 </body>
 </html>

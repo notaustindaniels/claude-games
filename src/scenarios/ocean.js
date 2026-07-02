@@ -102,6 +102,11 @@ export async function init({ renderer, params }) {
     });
   }
 
+  // ?spraydebug=1: bypass the breaking gate (all particles emit).
+  if (params.get('spraydebug') === '1' && ocean.spray) {
+    ocean.spray.uniforms.jThresh.value = 99;
+  }
+
   const label = params.get('label');
 
   async function update(dt, simTime) {
@@ -141,9 +146,23 @@ export async function init({ renderer, params }) {
           mx = Math.max(mx, h);
           sum2 += h * h;
         }
+        // Jacobian stats (channel w) for both structural cascades.
+        const jstats = async (rt) => {
+          const b = await renderer.readRenderTargetPixelsAsync(rt, 0, 0, N, N);
+          let jmn = Infinity, jmx = -Infinity, lo45 = 0, lo66 = 0;
+          for (let i = 0; i < N * N; i++) {
+            const J = b[i * 4 + 3];
+            jmn = Math.min(jmn, J); jmx = Math.max(jmx, J);
+            if (J < 0.45) lo45++;
+            if (J < 0.66) lo66++;
+          }
+          return { jmin: +jmn.toFixed(3), jmax: +jmx.toFixed(3), pctLo45: +(100*lo45/(N*N)).toFixed(2), pctLo66: +(100*lo66/(N*N)).toFixed(2) };
+        };
         window.__OO.fieldProbe = {
           min: +mn.toFixed(3), max: +mx.toFixed(3),
           rms: +Math.sqrt(sum2 / (N * N)).toFixed(3),
+          j0: await jstats(ocean.sim.dispRT[0]),
+          j1: await jstats(ocean.sim.dispRT[1]),
         };
       } catch (e) {
         window.__OO.fieldProbe = { error: String(e) };

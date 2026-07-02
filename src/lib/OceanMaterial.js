@@ -93,6 +93,10 @@ export function applyConfigToUniforms(u, cfg, swellSim, N = 256) {
   u.horizon.value.set(cfg.sky.horizon);
   u.haze.value.set(cfg.sky.haze);
   u.sunIntensity.value = cfg.sky.sunIntensity;
+  if (cfg.fog) {
+    u.fogStart.value = cfg.fog[0];
+    u.fogEnd.value = cfg.fog[1];
+  }
 }
 
 const SWIZ = ['x', 'y', 'z'];

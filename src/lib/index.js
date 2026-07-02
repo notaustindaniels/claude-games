@@ -10,6 +10,7 @@ import { makeUnderwaterOverlay, makeUnderwaterFogWrapper } from './underwater.js
 import { makeSunShafts } from './sunshafts.js';
 import { resolvePreset, PRESETS, PRESET_NAMES } from './presets.js';
 import { causticsNode, makeCausticsPass } from './caustics.js';
+import { makeSpray } from './spray.js';
 
 export { PRESETS, PRESET_NAMES, causticsNode };
 
@@ -157,6 +158,13 @@ export async function createOcean(options = {}) {
     scene.add(sunShafts.group);
   }
 
+  // Crest spray particles (stateless GPU, preset-driven intensity).
+  let spray = null;
+  if (options.spray !== false) {
+    spray = makeSpray({ sim });
+    scene.add(spray.points);
+  }
+
   // Refracted-ray caustics (camera-local map re-rendered per frame).
   let caustics = null;
   let bedAt = () => -40;
@@ -193,6 +201,7 @@ export async function createOcean(options = {}) {
   const ocean = {
     surface,
     sim,
+    spray,
     uniforms: u,
     skyDome,
     material,
@@ -232,6 +241,7 @@ export async function createOcean(options = {}) {
           );
         }
       }
+      if (spray) spray.update(camera, simTime, cfg);
       if (caustics) {
         // Center the caustic region a little ahead of the camera; use the
         // local average bed depth as the projection plane.
@@ -294,6 +304,7 @@ export async function createOcean(options = {}) {
     dispose() {
       sim.dispose();
       caustics?.dispose();
+      spray?.dispose();
       surface.geometry.dispose();
       material.dispose();
       scene.remove(surface, overlay.mesh);
