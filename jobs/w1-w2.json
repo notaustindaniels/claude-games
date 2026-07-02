@@ -1,0 +1,50 @@
+[
+ {
+  "name": "w1-wind-low",
+  "params": "scenario=ocean&fixeddt=1&dt=0.25&preset=moderate&windspeed=4.5&swell=0&seed=1337&seabed=0&lighthouse=0&crate=0&buoy=0&cam=0,10,0&look=105,0,-228&label=W1:+wind+4.5+m/s+(swell+off)",
+  "width": 960,
+  "height": 540,
+  "captures": [
+   {
+    "untilSimTime": 10,
+    "out": "shots/w1-wind-4.5.png"
+   }
+  ]
+ },
+ {
+  "name": "w1-wind-high",
+  "params": "scenario=ocean&fixeddt=1&dt=0.25&preset=moderate&windspeed=16&swell=0&seed=1337&seabed=0&lighthouse=0&crate=0&buoy=0&cam=0,10,0&look=105,0,-228&label=W1:+wind+16+m/s+(swell+off)",
+  "width": 960,
+  "height": 540,
+  "captures": [
+   {
+    "untilSimTime": 10,
+    "out": "shots/w1-wind-16.png"
+   }
+  ]
+ },
+ {
+  "name": "w2-altitude",
+  "params": "scenario=ocean&fixeddt=1&dt=0.25&preset=moderate&seed=1337&seabed=0&lighthouse=0&crate=0&buoy=0&cam=0,260,0&look=350,0,-600&label=W2:+high+altitude+anti-tiling",
+  "width": 960,
+  "height": 540,
+  "captures": [
+   {
+    "untilSimTime": 10,
+    "out": "shots/w2-altitude.png"
+   }
+  ]
+ },
+ {
+  "name": "storm-check",
+  "params": "scenario=ocean&fixeddt=1&dt=0.25&preset=storm&seed=1337&seabed=0&lighthouse=0&crate=0&buoy=0&cam=0,14,0&look=105,0,-228&label=storm+preset+check",
+  "width": 960,
+  "height": 540,
+  "captures": [
+   {
+    "untilSimTime": 12,
+    "out": "shots/check-storm.png"
+   }
+  ]
+ }
+]
