@@ -6,7 +6,7 @@ import * as THREE from 'three/webgpu';
 import {
   Fn, uniform, texture, positionLocal, cameraPosition, varying, float, vec2,
   vec3, normalize, dot, max, min, clamp, saturate, mix, exp, pow, abs, sin,
-  cos, reflect, smoothstep, oneMinus, length, mx_noise_float, select,
+  cos, reflect, refract, smoothstep, oneMinus, length, mx_noise_float, select,
   frontFacing, reflector, fwidth, attribute,
 } from 'three/tsl';
 import { MAX_SWELL } from './gerstner.js';
@@ -101,34 +101,15 @@ export function applyConfigToUniforms(u, cfg, swellSim) {
 const SWIZ = ['x', 'y', 'z'];
 
 /**
- * Build the water material.
- * deps: {
- *   sim: OceanSim,
- *   skyColorFn: TSL Fn(dir) → color,
- *   seabedTexture: THREE.Texture | null,
- *   reflection: { enabled, resolutionScale, onReflector(node) } | null,
- * }
+ * Surface-field evaluators shared by the water material and the caustics
+ * pass. IMPORTANT: pass each material its OWN uniform bag `u` — shared float
+ * uniform nodes silently read 0 in second materials on the WebGL2 fallback.
  */
-export function makeOceanMaterial(u, deps) {
-  const { sim, skyColorFn, seabedTexture } = deps;
-  // lite: strip per-fragment noise (detail normals, ambient/contact foam
-  // texture, in-water caustics) — the dominant fragment cost in software
-  // rasterizers. Crest foam, Fresnel, absorption and swell remain.
-  const lite = !!deps.lite;
-  const dispTex = texture(sim.dispTexture);
-  const normTex = texture(sim.normTexture);
-  const seabedTex = seabedTexture ? texture(seabedTexture) : null;
-  const laceTex = deps.laceTexture ? texture(deps.laceTexture) : null;
-
-  const material = new THREE.MeshBasicNodeMaterial({ fog: false });
-  material.side = THREE.DoubleSide;
-
-  // ---- Swell displacement (must mirror gerstner.js evalSwell) ----
+export function makeFieldFns(u, dispTex, normTex) {
   const swellPacks = [u.swellA, u.swellB, u.swellC];
 
-  // sampleSize: local metres the caller can resolve (grid spacing in the
-  // vertex stage, pixel footprint in the fragment stage). Each swell wave
-  // fades out before it aliases against that sampling density.
+  // sampleSize: local metres the caller can resolve; waves shorter than
+  // that fade out before aliasing.
   const swellWaveFade = (p, sampleSize) => {
     const lambda = float(2 * Math.PI).div(p.w);
     return oneMinus(smoothstep(lambda.mul(0.07), lambda.mul(0.16), sampleSize));
@@ -173,32 +154,20 @@ export function makeOceanMaterial(u, deps) {
     return vec2(nx.mul(inv), nz.mul(inv));
   });
 
-  // ---- FFT sampling, two scales (mirrors OceanSim.sampleDisplacement) ----
   const secUV = Fn(([wxz]) => {
     const t2 = u.tileSize.mul(u.secScale);
     return wxz.add(vec2(t2.mul(0.31), t2.mul(0.71))).div(t2);
   });
 
-  // ---- Vertex stage ----
-  const worldXZ = positionLocal.xz.add(u.meshOffset);
-  const gridSpacing = attribute('spacing', 'float');
-  // Fade each displacement source before the local grid density undersamples
-  // it (moiré/chevron artifacts otherwise). FFT chop needs a few texels per
-  // vertex; the secondary (stretched) sample survives 3.17× further; swell
-  // fades per-wave against its own wavelength.
-  const fftVertFade = oneMinus(smoothstep(u.fftTexel.mul(2.0), u.fftTexel.mul(10.0), gridSpacing));
-  const secVertFade = oneMinus(smoothstep(u.fftTexel.mul(2.0).mul(u.secScale), u.fftTexel.mul(10.0).mul(u.secScale), gridSpacing));
-  const fftD = dispTex.sample(worldXZ.div(u.tileSize)).xyz.mul(fftVertFade)
-    .add(dispTex.sample(secUV(worldXZ)).xyz.mul(u.secAmp).mul(secVertFade));
-  const totalD = fftD.add(swellDisp(worldXZ, gridSpacing));
+  // Combined FFT displacement (two scales), fading each source before the
+  // local sampling density (grid spacing / pixel footprint) undersamples it.
+  const fftDisp = Fn(([wxz, sampleSize]) => {
+    const fade1 = oneMinus(smoothstep(u.fftTexel.mul(2.0), u.fftTexel.mul(10.0), sampleSize));
+    const fade2 = oneMinus(smoothstep(u.fftTexel.mul(2.0).mul(u.secScale), u.fftTexel.mul(10.0).mul(u.secScale), sampleSize));
+    return dispTex.sample(wxz.div(u.tileSize)).xyz.mul(fade1)
+      .add(dispTex.sample(secUV(wxz)).xyz.mul(u.secAmp).mul(fade2));
+  });
 
-  material.positionNode = positionLocal.add(totalD);
-
-  const vWorldPos = varying(vec3(worldXZ.x.add(totalD.x), totalD.y, worldXZ.y.add(totalD.z)));
-  const vRefXZ = varying(worldXZ); // pre-displacement reference for texture UVs
-  const vWaveHeight = varying(totalD.y);
-
-  // ---- Fragment helpers ----
   const fftSlopes = Fn(([wxz, fade]) => {
     const n1 = normTex.sample(wxz.div(u.tileSize));
     const n2 = normTex.sample(secUV(wxz));
@@ -208,6 +177,48 @@ export function makeOceanMaterial(u, deps) {
     const s2z = n2.z.negate().div(max(n2.y, 0.2)).mul(u.secNormWeight);
     return vec2(s1x.add(s2x), s1z.add(s2z)).mul(fade);
   });
+
+  return { swellDisp, swellSlopes, secUV, fftDisp, fftSlopes };
+}
+
+/**
+ * Build the water material.
+ * deps: {
+ *   sim: OceanSim,
+ *   skyColorFn: TSL Fn(dir) → color,
+ *   seabedTexture: THREE.Texture | null,
+ *   reflection: { enabled, resolutionScale, onReflector(node) } | null,
+ * }
+ */
+export function makeOceanMaterial(u, deps) {
+  const { sim, skyColorFn, seabedTexture } = deps;
+  // lite: strip per-fragment noise (detail normals, ambient/contact foam
+  // texture, in-water caustics) — the dominant fragment cost in software
+  // rasterizers. Crest foam, Fresnel, absorption and swell remain.
+  const lite = !!deps.lite;
+  const dispTex = texture(sim.dispTexture);
+  const normTex = texture(sim.normTexture);
+  const seabedTex = seabedTexture ? texture(seabedTexture) : null;
+  const laceTex = deps.laceTexture ? texture(deps.laceTexture) : null;
+
+  const material = new THREE.MeshBasicNodeMaterial({ fog: false });
+  material.side = THREE.DoubleSide;
+
+  const { swellDisp, swellSlopes, secUV, fftDisp, fftSlopes } =
+    makeFieldFns(u, dispTex, normTex);
+
+  // ---- Vertex stage ----
+  const worldXZ = positionLocal.xz.add(u.meshOffset);
+  const gridSpacing = attribute('spacing', 'float');
+  // Each displacement source fades before the local grid density
+  // undersamples it (moiré/chevron artifacts otherwise).
+  const totalD = fftDisp(worldXZ, gridSpacing).add(swellDisp(worldXZ, gridSpacing));
+
+  material.positionNode = positionLocal.add(totalD);
+
+  const vWorldPos = varying(vec3(worldXZ.x.add(totalD.x), totalD.y, worldXZ.y.add(totalD.z)));
+  const vRefXZ = varying(worldXZ); // pre-displacement reference for texture UVs
+  const vWaveHeight = varying(totalD.y);
 
   const seabedHeight = Fn(([wxz]) => {
     if (!seabedTex) return vec3(u.seabedDeep).x;
@@ -400,9 +411,18 @@ export function makeOceanMaterial(u, deps) {
 
     // Underside (camera underwater looking up at the surface).
     const upDot = saturate(dot(V.negate(), nUp)); // V points down toward camera
-    const snell = smoothstep(float(0.62), float(0.82), upDot);
-    const skyThrough = skyColorFn(vec3(V.x.negate(), abs(V.y), V.z.negate()));
-    const belowBase = mix(u.uwFogColor.mul(0.7), skyThrough.mul(0.85), snell);
+    const snell = smoothstep(float(0.6), float(0.8), upDot);
+    // Through the Snell window the view refracts into the sky — perturbed by
+    // the wave normal so crests shimmer; outside it the surface is a dim
+    // mirror whose brightness follows the sun-facing slope, so wave
+    // structure stays readable from below instead of flat murk.
+    const refr = refract(V.negate(), nUp.negate(), float(1.333));
+    const refrValid = dot(refr, refr).greaterThan(0.0001);
+    const skyDir = select(refrValid, normalize(refr), vec3(V.x.negate(), abs(V.y), V.z.negate()));
+    const skyThrough = skyColorFn(skyDir);
+    const slopeSun = saturate(slopes.x.mul(u.sunDir.x).add(slopes.y.mul(u.sunDir.z)).mul(-1.6).add(0.5));
+    const tirShade = u.uwFogColor.mul(slopeSun.mul(0.7).add(0.4));
+    const belowBase = mix(tirShade, skyThrough.mul(0.85), snell);
     const below = mix(belowBase, u.foamColor.mul(0.55), foam.mul(0.6));
     const belowFogged = mix(below, u.uwFogColor, oneMinus(exp(camDist.mul(u.uwFogDensity).negate())));
 

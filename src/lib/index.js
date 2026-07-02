@@ -9,7 +9,7 @@ import { makeSkyColorFn, makeSkyDome } from './sky.js';
 import { makeUnderwaterOverlay, makeUnderwaterFogWrapper } from './underwater.js';
 import { makeSunShafts } from './sunshafts.js';
 import { resolvePreset, PRESETS, PRESET_NAMES } from './presets.js';
-import { causticsNode } from './caustics.js';
+import { causticsNode, makeCausticsPass } from './caustics.js';
 
 export { PRESETS, PRESET_NAMES, causticsNode };
 
@@ -148,6 +148,25 @@ export async function createOcean(options = {}) {
     scene.add(sunShafts.group);
   }
 
+  // Refracted-ray caustics (camera-local map re-rendered per frame).
+  let caustics = null;
+  let bedAt = () => -40;
+  if (options.seabed && options.caustics !== false) {
+    const sb = options.seabed;
+    const sbData = sb.texture.image.data;
+    const sbN = sb.texture.image.width;
+    const [bx, bz, bw, bh] = sb.bounds;
+    bedAt = (x, z) => {
+      const uS = ((x - bx) / bw) * sbN;
+      const vS = ((z - bz) / bh) * sbN;
+      if (uS < 0 || vS < 0 || uS >= sbN || vS >= sbN) return sb.deepY ?? -40;
+      return sbData[((vS | 0) * sbN + (uS | 0)) * 4];
+    };
+    caustics = makeCausticsPass({ sim });
+  }
+  const camDirTmp = new THREE.Vector3();
+  const causCenterTmp = new THREE.Vector2();
+
   function applySun(cfgSky) {
     const el = cfgSky.sunElevation * DEG;
     const az = cfgSky.sunAzimuth * DEG;
@@ -204,7 +223,22 @@ export async function createOcean(options = {}) {
           );
         }
       }
+      if (caustics) {
+        // Center the caustic region a little ahead of the camera; use the
+        // local average bed depth as the projection plane.
+        camera.getWorldDirection(camDirTmp);
+        causCenterTmp.set(
+          camera.position.x + camDirTmp.x * 14,
+          camera.position.z + camDirTmp.z * 14
+        );
+        const bedYAvg = Math.min(bedAt(causCenterTmp.x, causCenterTmp.y), -0.6);
+        await caustics.update(renderer, u, sim.swell, causCenterTmp, bedYAvg);
+      }
     },
+
+    /** TSL: caustic light factor (≈1 neutral) at a world position, or null. */
+    causticsSample: caustics ? caustics.sampleAt : null,
+    causticsTexture: caustics ? caustics.texture : null,
 
     /** Water surface height at world (x, z) — CPU, matches the render. */
     getHeightAt(x, z) {
@@ -250,6 +284,7 @@ export async function createOcean(options = {}) {
 
     dispose() {
       sim.dispose();
+      caustics?.dispose();
       surface.geometry.dispose();
       material.dispose();
       scene.remove(surface, overlay.mesh);

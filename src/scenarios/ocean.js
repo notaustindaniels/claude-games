@@ -55,6 +55,7 @@ export async function init({ renderer, params }) {
     seed: num(params, 'seed', 1337),
     spectrum: params.get('spectrum') || 'jonswap',
     reflections: params.get('refl') !== '0',
+    sunShafts: params.get('shafts') !== '0',
     seabed,
     overrides,
   });
@@ -67,7 +68,7 @@ export async function init({ renderer, params }) {
 
   const props = { crate: null, buoy: null };
   if (seabed && params.get('seabedmesh') !== '0') {
-    scene.add(makeSeabedMesh(ocean));
+    scene.add(makeSeabedMesh(ocean, { procCaustics: params.get('proccaustics') === '1' }));
   }
   if (params.get('lighthouse') !== '0') {
     const lh = makeLighthouse();

@@ -3,7 +3,7 @@
 // for depth-based absorption and contact foam.
 import * as THREE from 'three/webgpu';
 import {
-  Fn, vec2, vec3, float, positionWorld, mix, saturate, smoothstep, dot,
+  Fn, vec2, vec3, float, positionWorld, mix, saturate, smoothstep, dot, min,
   normalize, normalLocal, uniform, mul, cameraPosition, oneMinus, exp,
 } from 'three/tsl';
 import { causticsNode } from '../lib/index.js';
@@ -43,7 +43,7 @@ export function makeSeabedTexture() {
   return { texture, bounds: SEABED_BOUNDS, deepY: -42 };
 }
 
-export function makeSeabedMesh(ocean) {
+export function makeSeabedMesh(ocean, opts = {}) {
   const [minX, minZ, sizeX, sizeZ] = SEABED_BOUNDS;
   const sunDirUniform = ocean.uniforms.sunDir;
   const SEG = 220;
@@ -56,6 +56,8 @@ export function makeSeabedMesh(ocean) {
     pos.setY(v, seabedHeight(x, z));
   }
   geo.computeVertexNormals();
+
+  const useRefracted = !!ocean.causticsSample && !opts.procCaustics;
 
   const mat = new THREE.MeshBasicNodeMaterial({ fog: false });
   const time = ocean.uniforms.time;
@@ -70,12 +72,27 @@ export function makeSeabedMesh(ocean) {
       const baseCol = mix(sand, mix(rock, grass, smoothstep(float(4), float(10), wp.y)), aboveMix);
       // Lambert-ish shading from geometry normal.
       const ndl = saturate(dot(normalize(normalLocal), sunDirUniform)).mul(0.75).add(0.3);
-      // Animated caustics, fading out with depth and gone above water.
       const depth = float(0).sub(wp.y);
       const causStrength = smoothstep(float(-0.5), float(1.5), depth)
-        .mul(smoothstep(float(26), float(4), depth));
+        .mul(smoothstep(float(30), float(6), depth));
+      // Downwelling attenuation: sunlight reaching the bed has crossed the
+      // water column once, so submerged sand shifts teal with depth (the
+      // pink dry-sand albedo must not survive at 5 m down).
+      const downAtt = exp(vec3(0.30, 0.09, 0.075).mul(depth.mul(1.2)).negate());
+      const colAtt = mix(vec3(1), downAtt, smoothstep(float(-0.3), float(0.8), depth));
+      const lit = baseCol.mul(ndl).mul(colAtt);
+      if (useRefracted) {
+        // Refracted-ray caustic map (≈1 neutral). The surplus light is
+        // attenuated per-channel with depth (red dies first) so deep
+        // caustics turn blue-green instead of staying white.
+        const F = min(ocean.causticsSample(wp), 3.5);
+        const att = exp(vec3(0.30, 0.09, 0.075).mul(depth.mul(0.6)).negate());
+        const causLight = vec3(1).add(F.sub(1).mul(att).mul(causStrength).mul(1.6));
+        return lit.mul(causLight);
+      }
+      // Old procedural Worley web (kept for the Q3 comparison shot).
       const caus = causticsNode(wp.xz, time, float(0.45)).mul(causStrength);
-      return baseCol.mul(ndl).mul(caus.mul(0.5).add(0.82));
+      return lit.mul(caus.mul(0.5).add(0.82));
     }
   );
 

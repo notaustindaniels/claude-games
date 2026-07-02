@@ -1,0 +1,26 @@
+[
+ {
+  "name": "q3-underwater-refracted",
+  "params": "scenario=ocean&preset=calm&fixeddt=1&dt=0.25&seed=1337&sunel=72&fov=72&cam=-40,-3.4,187&look=-40,-1.2,162&lighthouse=0&crate=0&buoy=0&hud=0&shafts=0",
+  "width": 960,
+  "height": 540,
+  "captures": [
+   {
+    "untilSimTime": 6,
+    "out": "shots/q3-underwater.png"
+   }
+  ]
+ },
+ {
+  "name": "q3-underwater-procedural",
+  "params": "scenario=ocean&preset=calm&fixeddt=1&dt=0.25&seed=1337&sunel=72&fov=72&cam=-40,-3.4,187&look=-40,-1.2,162&lighthouse=0&crate=0&buoy=0&hud=0&shafts=0&proccaustics=1",
+  "width": 960,
+  "height": 540,
+  "captures": [
+   {
+    "untilSimTime": 6,
+    "out": "shots/q3-underwater-proc.png"
+   }
+  ]
+ }
+]

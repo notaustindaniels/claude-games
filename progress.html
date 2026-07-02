@@ -150,5 +150,32 @@
   closeup) — a Q4/Q5-adjacent tell tracked separately.</div>
 </div>
 
+<div class="entry" id="q-pass-3">
+  <h2>Q-Pass 3 — 2026-07-02 — Q3: Wallace-technique refracted caustics (TSL reimplementation)</h2>
+  <p><strong>What changed:</strong> Replaced the procedural Worley caustics on the demo seabed with the
+  webgl-water-study technique, reimplemented in TSL from the algorithm (no GLSL copied): a 256² grid over a camera-local
+  56&nbsp;m region samples the full surface (FFT two-scale + swell) each frame, refracts the sun ray through the
+  per-vertex normal, and is rasterized into a 768² half-float map at its refracted-ray landing point on the locally-flat
+  seabed plane (average local depth, updated per frame); a varying carries the flat-refraction landing (oldPos) and the
+  true landing (newPos), and fragment intensity = oldArea/newArea from screen-space derivatives, additively blended so
+  folded sheets add light. Sampling applies depth-dependent + footprint-aware 5-tap blur (the map has no mips) with
+  per-channel absorption so deep caustics turn blue-green; the region fades to neutral at its edge. No sphere shadow
+  term. Ocean fixes en route: alternating grid diagonals (uniform splits produced diagonal dash artifacts), downwelling
+  per-channel attenuation on the seabed (submerged sand no longer renders dry-pink), and a physically refracted,
+  slope-shaded view of the surface from below (crest structure now readable in the same frame as the caustics).</p>
+  <div class="shots">
+    <figure><img src="shots/q3-underwater.png" alt="refracted caustics underwater" /><figcaption>shots/q3-underwater.png — 7&nbsp;m bank, sun 72°: caustic filaments on the bed and the wave field above in one frame; streak direction matches the crest direction visible through the Snell window</figcaption></figure>
+    <figure><img src="shots/q3-vs-procedural.png" alt="new vs old caustics" /><figcaption>shots/q3-vs-procedural.png — refracted (left) vs old procedural Worley (right), identical camera/sim time</figcaption></figure>
+    <figure><img src="shots/q3-vs-reference.png" alt="ours vs reference caustics" /><figcaption>shots/q3-vs-reference.png — ours (left) vs reference/ref_caustics.jpg (right)</figcaption></figure>
+  </div>
+  <div class="honest"><strong>Honest assessment vs reference:</strong> The caustics are now wave-driven — filaments
+  elongate along the wave direction and track the crests above (offset laterally by the refraction geometry, ~0.2×depth
+  at this sun angle, so the correspondence reads as matching direction/scale rather than exact overlay). The procedural
+  version's wave-agnostic blobs are gone. Still short of ref_caustics.jpg: (1) the reference webbing is finer and more
+  isotropic because centimetre ripples drive it — our finest simulated wave is ~1&nbsp;m until the Q1 12&nbsp;m cascade
+  lands; (2) faint dotted moiré survives at grazing distance where sub-texel map lines undersample; (3) the underside
+  mirror region between Snell window and waterline is still flatter than real footage.</div>
+</div>
+
 </body>
 </html>
