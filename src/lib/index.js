@@ -1,7 +1,7 @@
 // OpenOcean — standalone FFT ocean rendering system for three.js.
 // Public API: createOcean({ renderer, scene, camera, ...options }) → Ocean.
 import * as THREE from 'three/webgpu';
-import { OceanSim } from './OceanSim.js';
+import { GPUOceanSim } from './gpu-sim.js';
 import { makeSurfaceGeometry } from './OceanSurface.js';
 import { makeOceanUniforms, makeOceanMaterial, applyConfigToUniforms } from './OceanMaterial.js';
 import { foamLaceData } from './foamlace.js';
@@ -46,12 +46,31 @@ export async function createOcean(options = {}) {
   const quality = QUALITY_TIERS[options.quality ?? 'medium'] ?? QUALITY_TIERS.medium;
   let cfg = resolvePreset(options.preset ?? 'moderate', options.overrides ?? {});
 
-  const sim = new OceanSim({
+  // Foam breakup ("lace") texture — also the sim's injection dither source.
+  const laceTexture = new THREE.DataTexture(
+    foamLaceData(256, 9001), 256, 256, THREE.RGBAFormat, THREE.UnsignedByteType
+  );
+  laceTexture.wrapS = laceTexture.wrapT = THREE.RepeatWrapping;
+  laceTexture.magFilter = THREE.LinearFilter;
+  laceTexture.minFilter = THREE.LinearMipmapLinearFilter;
+  laceTexture.generateMipmaps = true;
+  laceTexture.colorSpace = THREE.NoColorSpace;
+  laceTexture.needsUpdate = true;
+
+  // GPU FFT simulation: three wavelength-banded cascades. Cascade 0 (the
+  // structural/foam cascade) uses the preset tile so storm presets keep
+  // their long peak waves; the 59 m / 13 m cascades add mid detail and
+  // centimetre chop.
+  const sim = new GPUOceanSim({
+    renderer,
     N: options.fftSize ?? quality.fftSize,
-    tileSize: cfg.sim.tileSize,
+    cascades: [
+      { tileSize: cfg.sim.tileSize, bandMinLambda: 29.5 },
+      { tileSize: 59, bandMinLambda: 6.5, bandMaxLambda: 29.5 },
+      { tileSize: 13, bandMaxLambda: 6.5 },
+    ],
     seed: options.seed ?? 1337,
     swell: cfg.swellRad,
-    secondary: cfg.secondary,
     windSpeed: cfg.sim.windSpeed,
     windDirectionRad: cfg.sim.windDirectionRad,
     fetch: cfg.sim.fetch,
@@ -63,12 +82,14 @@ export async function createOcean(options = {}) {
     foamDecay: cfg.sim.foamDecay,
     foamBias: cfg.sim.foamBias,
     foamGain: cfg.sim.foamGain,
+    foamAdvect: cfg.sim.foamAdvect,
+    foamDrift: cfg.sim.foamDrift,
+    ditherTexture: laceTexture,
   });
   await sim.init();
 
   const u = makeOceanUniforms(cfg);
-  applyConfigToUniforms(u, cfg, sim.swell);
-  u.fftTexel.value = cfg.sim.tileSize / sim.N;
+  applyConfigToUniforms(u, cfg, sim.swell, sim.N);
 
   const skyU = {
     sunDir: u.sunDir,
@@ -90,18 +111,6 @@ export async function createOcean(options = {}) {
     u.seabedBounds.value.set(...options.seabed.bounds);
     u.seabedDeep.value = options.seabed.deepY ?? -45;
   }
-
-  // Foam breakup ("lace") texture: tileable, mipmapped, shared by all foam
-  // layers so mats and shoreline foam tear the same way.
-  const laceTexture = new THREE.DataTexture(
-    foamLaceData(256, 9001), 256, 256, THREE.RGBAFormat, THREE.UnsignedByteType
-  );
-  laceTexture.wrapS = laceTexture.wrapT = THREE.RepeatWrapping;
-  laceTexture.magFilter = THREE.LinearFilter;
-  laceTexture.minFilter = THREE.LinearMipmapLinearFilter;
-  laceTexture.generateMipmaps = true;
-  laceTexture.colorSpace = THREE.NoColorSpace;
-  laceTexture.needsUpdate = true;
 
   const reflectionEnabled = (options.reflections ?? true) && quality.reflection;
   let reflectorTarget = null;
@@ -255,7 +264,7 @@ export async function createOcean(options = {}) {
       cfg = resolvePreset(name, overrides);
       this.config = cfg;
       await sim.reinit({
-        tileSize: cfg.sim.tileSize,
+        cascade0TileSize: cfg.sim.tileSize,
         windSpeed: cfg.sim.windSpeed,
         windDirectionRad: cfg.sim.windDirectionRad,
         fetch: cfg.sim.fetch,
@@ -266,11 +275,11 @@ export async function createOcean(options = {}) {
         foamDecay: cfg.sim.foamDecay,
         foamBias: cfg.sim.foamBias,
         foamGain: cfg.sim.foamGain,
+        foamAdvect: cfg.sim.foamAdvect,
+        foamDrift: cfg.sim.foamDrift,
         swell: cfg.swellRad,
-        secondary: cfg.secondary,
       });
-      applyConfigToUniforms(u, cfg, sim.swell);
-      u.fftTexel.value = cfg.sim.tileSize / sim.N;
+      applyConfigToUniforms(u, cfg, sim.swell, sim.N);
       applySun(cfg.sky);
     },
 

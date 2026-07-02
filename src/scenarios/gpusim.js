@@ -2,8 +2,9 @@
 // against the CPU reference implementation (same seed/band), and displays the
 // raw field textures. The harness asserts window.__OO.verify.ok.
 import * as THREE from 'three/webgpu';
-import { Fn, texture, uv, vec4, vec3, float, positionLocal } from 'three/tsl';
+import { Fn, texture, uv, vec4, vec3, vec2, float, positionLocal, varying, uniform } from 'three/tsl';
 import { GPUOceanSim } from '../lib/gpu-sim.js';
+import { makeFieldFns } from '../lib/OceanMaterial.js';
 import { foamLaceData } from '../lib/foamlace.js';
 
 function num(params, key, dflt) {
@@ -60,6 +61,34 @@ export async function init({ renderer, params }) {
     mat.colorNode = Fn(() => vec4(t.sample(uv()).xyz.mul(q.scale).add(q.bias), 1))();
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 1.0), mat);
     mesh.position.set(q.pos[0], q.pos[1], 0);
+    scene.add(mesh);
+  }
+
+  // Probe: color the center quad by the WATER MATERIAL's actual fftDisp()
+  // (cascade loop + tiles/texels uniforms) evaluated in the vertex stage.
+  // Flat grey = makeFieldFns broken; waves = water-material context broken.
+  {
+    const pu = {
+      tiles: uniform(new THREE.Vector3(256, 59, 13)),
+      texels: uniform(new THREE.Vector3(1, 59 / 256, 13 / 256)),
+      detailNormal: uniform(0.34),
+      time: uniform(0),
+      swellA: uniform(new THREE.Vector4(1, 0, 0, 1)),
+      swellB: uniform(new THREE.Vector4(1, 0, 0, 1)),
+      swellC: uniform(new THREE.Vector4(1, 0, 0, 1)),
+      swellQ: uniform(new THREE.Vector3(0, 0, 0)),
+      swellOmega: uniform(new THREE.Vector3(0, 0, 0)),
+    };
+    const dt = sim.dispTextures.map((t) => texture(t));
+    const nt = sim.normTextures.map((t) => texture(t));
+    const fields = makeFieldFns(pu, dt, nt);
+    const mat = new THREE.MeshBasicNodeMaterial();
+    const wxz = uv().mul(200); // fake world coords, 200 m span
+    const hV = varying(fields.fftDisp(wxz, float(0.5)).y);
+    mat.positionNode = positionLocal.add(vec3(0, 0, hV.mul(0.05)));
+    mat.colorNode = Fn(() => vec4(hV.mul(0.25).add(0.5), hV.mul(0.25).add(0.5), 0.2, 1))();
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.7, 48, 24), mat);
+    mesh.position.set(0, 0, 0.2);
     scene.add(mesh);
   }
 

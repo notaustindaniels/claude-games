@@ -1,0 +1,9 @@
+[
+  {
+    "name": "q1-field-probe",
+    "params": "scenario=ocean&preset=moderate&fixeddt=1&dt=0.25&seed=1337&fieldprobe=1&seabed=0&lighthouse=0&crate=0&buoy=0",
+    "width": 640,
+    "height": 360,
+    "captures": [{ "untilSimTime": 8, "out": "shots/q1-probe.png" }]
+  }
+]

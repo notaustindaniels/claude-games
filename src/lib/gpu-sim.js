@@ -21,12 +21,12 @@ import { OceanSim } from './OceanSim.js';
 
 const G = 9.81;
 
-function makeRT(n, { float32 = false } = {}) {
+function makeRT(n, { float32 = false, linear = !float32 } = {}) {
   return new THREE.RenderTarget(n, n, {
     type: float32 ? THREE.FloatType : THREE.HalfFloatType,
     format: THREE.RGBAFormat,
-    minFilter: float32 ? THREE.NearestFilter : THREE.LinearFilter,
-    magFilter: float32 ? THREE.NearestFilter : THREE.LinearFilter,
+    minFilter: linear ? THREE.LinearFilter : THREE.NearestFilter,
+    magFilter: linear ? THREE.LinearFilter : THREE.NearestFilter,
     wrapS: THREE.RepeatWrapping,
     wrapT: THREE.RepeatWrapping,
     depthBuffer: false,
@@ -76,12 +76,14 @@ export class GPUOceanSim {
     const N = this.N;
     const C = this.cascades.length;
 
-    // Buoyancy mirror: small CPU worker on the cascade-0 band only.
+    // Buoyancy mirror: small CPU worker on the cascade-0 band only (the
+    // fine cascades contribute centimetres — irrelevant for floaters).
     this.cpuMirror = new OceanSim({
       ...options,
       N: 64,
       tileSize: this.cascades[0].tileSize,
       foamGain: 0,
+      secondary: { scale: 1, weight: 0 }, // no stretched second sample
       bandMinLambda: this.cascades[0].bandMinLambda ?? 0,
       bandMaxLambda: this.cascades[0].bandMaxLambda ?? Infinity,
     });
@@ -106,12 +108,14 @@ export class GPUOceanSim {
     for (let c = 0; c < C; c++) {
       this.chainA.push(makeRT(N, { float32: true }));
       this.chainB.push(makeRT(N, { float32: true }));
-      this.dispRT.push(makeRT(N));
-      this.normRT.push(makeRT(N));
+      // 32F + linear: the scene materials sample these in the VERTEX stage,
+      // where half-float linear fetches silently return 0 on the fallback.
+      this.dispRT.push(makeRT(N, { float32: true, linear: true }));
+      this.normRT.push(makeRT(N, { float32: true, linear: true }));
     }
-    this.prevDisp0 = makeRT(N); // last frame's cascade-0 displacement (foam velocity)
-    this.foamRT = makeRT(N); // stable: sampled by the water material
-    this.foamWork = makeRT(N); // foam pass output before copy-back
+    this.prevDisp0 = makeRT(N, { float32: true, linear: true });
+    this.foamRT = makeRT(N, { float32: true, linear: true });
+    this.foamWork = makeRT(N, { float32: true, linear: true });
 
     this._buildMaterials();
 

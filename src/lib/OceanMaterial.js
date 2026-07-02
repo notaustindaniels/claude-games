@@ -17,11 +17,10 @@ export function makeOceanUniforms(cfg) {
   return {
     time: uniform(0),
     meshOffset: uniform(new THREE.Vector2(0, 0)),
-    tileSize: uniform(cfg.sim.tileSize),
-    fftTexel: uniform(cfg.sim.tileSize / 256),
-    secScale: uniform(cfg.secondary.scale),
-    secAmp: uniform(cfg.secondary.weight * cfg.secondary.scale * 0.5),
-    secNormWeight: uniform(cfg.secondary.weight),
+    // Cascade tile sizes / texel sizes (metres). x = structural cascade
+    // (foam space), y = mid, z = fine chop.
+    tiles: uniform(new THREE.Vector3(cfg.sim.tileSize, 59, 13)),
+    texels: uniform(new THREE.Vector3(cfg.sim.tileSize / 256, 59 / 256, 13 / 256)),
     // Swell: per-wave vec4(dirX, dirZ, amp, k) + q/omega packed per component.
     swellA: uniform(new THREE.Vector4(1, 0, 0, 1)),
     swellB: uniform(new THREE.Vector4(1, 0, 0, 1)),
@@ -67,16 +66,14 @@ export function makeOceanUniforms(cfg) {
 }
 
 /** Push preset-derived values into the uniform bag (swell in sim form). */
-export function applyConfigToUniforms(u, cfg, swellSim) {
+export function applyConfigToUniforms(u, cfg, swellSim, N = 256) {
   const w = cfg.water;
   u.windDir.value.set(
     Math.cos(cfg.sim.windDirectionRad ?? 0),
     Math.sin(cfg.sim.windDirectionRad ?? 0)
   );
-  u.tileSize.value = cfg.sim.tileSize;
-  u.secScale.value = cfg.secondary.scale;
-  u.secAmp.value = cfg.secondary.weight * cfg.secondary.scale * 0.5;
-  u.secNormWeight.value = cfg.secondary.weight;
+  u.tiles.value.set(cfg.sim.tileSize, 59, 13);
+  u.texels.value.set(cfg.sim.tileSize / N, 59 / N, 13 / N);
   const packs = [u.swellA, u.swellB, u.swellC];
   for (let i = 0; i < MAX_SWELL; i++) {
     const s = swellSim[i];
@@ -154,31 +151,42 @@ export function makeFieldFns(u, dispTex, normTex) {
     return vec2(nx.mul(inv), nz.mul(inv));
   });
 
-  const secUV = Fn(([wxz]) => {
-    const t2 = u.tileSize.mul(u.secScale);
-    return wxz.add(vec2(t2.mul(0.31), t2.mul(0.71))).div(t2);
-  });
-
-  // Combined FFT displacement (two scales), fading each source before the
-  // local sampling density (grid spacing / pixel footprint) undersamples it.
+  // Combined FFT displacement across cascades. Each cascade fades out when
+  // the local grid spacing can no longer represent its WAVELENGTH BAND
+  // (λ/3 rule) — texel size is the wrong criterion (a 2.7 m mesh renders
+  // 30 m waves regardless of texture resolution). Band edges are literals
+  // (cascade 0's top edge derives from its tile size).
+  const SW = ['x', 'y', 'z'];
+  const BAND_LO = [29.5 / 3, 6.5 / 3, 0.45 / 3];
   const fftDisp = Fn(([wxz, sampleSize]) => {
-    const fade1 = oneMinus(smoothstep(u.fftTexel.mul(2.0), u.fftTexel.mul(10.0), sampleSize));
-    const fade2 = oneMinus(smoothstep(u.fftTexel.mul(2.0).mul(u.secScale), u.fftTexel.mul(10.0).mul(u.secScale), sampleSize));
-    return dispTex.sample(wxz.div(u.tileSize)).xyz.mul(fade1)
-      .add(dispTex.sample(secUV(wxz)).xyz.mul(u.secAmp).mul(fade2));
+    const disp = vec3(0).toVar();
+    for (let c = 0; c < dispTex.length; c++) {
+      const hi = c === 0 ? float(85.0) : float(BAND_LO[c - 1]); // V1: all-literal edges
+      const fade = oneMinus(smoothstep(float(BAND_LO[c]), hi, sampleSize));
+      disp.addAssign(dispTex[c].sample(wxz.div(u.tiles[SW[c]])).xyz.mul(fade));
+    }
+    return disp;
   });
 
-  const fftSlopes = Fn(([wxz, fade]) => {
-    const n1 = normTex.sample(wxz.div(u.tileSize));
-    const n2 = normTex.sample(secUV(wxz));
-    const s1x = n1.x.negate().div(max(n1.y, 0.2));
-    const s1z = n1.z.negate().div(max(n1.y, 0.2));
-    const s2x = n2.x.negate().div(max(n2.y, 0.2)).mul(u.secNormWeight);
-    const s2z = n2.z.negate().div(max(n2.y, 0.2)).mul(u.secNormWeight);
-    return vec2(s1x.add(s2x), s1z.add(s2z)).mul(fade);
+  // Combined slopes across cascades; `fade` scales the whole result, the
+  // per-cascade footprint kill handles minification. The fine cascade is
+  // scaled by detailNormal so calm presets read glassier.
+  const fftSlopes = Fn(([wxz, footprint, fade]) => {
+    const sl = vec2(0).toVar();
+    for (let c = 0; c < normTex.length; c++) {
+      const texel = u.texels[SW[c]];
+      const keep = oneMinus(smoothstep(texel.mul(0.5), texel.mul(3.0), footprint));
+      const n = normTex[c].sample(wxz.div(u.tiles[SW[c]]));
+      const w = c === 2 ? keep.mul(u.detailNormal.mul(2.4)) : keep;
+      sl.addAssign(vec2(
+        n.x.negate().div(max(n.y, 0.2)),
+        n.z.negate().div(max(n.y, 0.2))
+      ).mul(w));
+    }
+    return sl.mul(fade);
   });
 
-  return { swellDisp, swellSlopes, secUV, fftDisp, fftSlopes };
+  return { swellDisp, swellSlopes, fftDisp, fftSlopes };
 }
 
 /**
@@ -196,15 +204,16 @@ export function makeOceanMaterial(u, deps) {
   // texture, in-water caustics) — the dominant fragment cost in software
   // rasterizers. Crest foam, Fresnel, absorption and swell remain.
   const lite = !!deps.lite;
-  const dispTex = texture(sim.dispTexture);
-  const normTex = texture(sim.normTexture);
+  const dispTex = sim.dispTextures.map((t) => texture(t));
+  const normTex = sim.normTextures.map((t) => texture(t));
+  const foamTex = texture(sim.foamTexture);
   const seabedTex = seabedTexture ? texture(seabedTexture) : null;
   const laceTex = deps.laceTexture ? texture(deps.laceTexture) : null;
 
   const material = new THREE.MeshBasicNodeMaterial({ fog: false });
   material.side = THREE.DoubleSide;
 
-  const { swellDisp, swellSlopes, secUV, fftDisp, fftSlopes } =
+  const { swellDisp, swellSlopes, fftDisp, fftSlopes } =
     makeFieldFns(u, dispTex, normTex);
 
   // ---- Vertex stage ----
@@ -241,47 +250,40 @@ export function makeOceanMaterial(u, deps) {
     const camDistF = length(vWorldPos.sub(cameraPosition));
     const camDist = camDistF;
 
-    // Where a pixel's ground footprint exceeds the FFT texel, every
-    // high-frequency term (minified texture normals, noise foam, per-vertex
-    // wave height) aliases into per-pixel speckle — there are no
-    // float-texture mips on the fallback backend. This is manual mip logic:
-    // fwidth gives metres-per-pixel; converge everything noisy to smooth
-    // distant-sea values as the footprint crosses the texel size.
+    // Where a pixel's ground footprint exceeds a cascade's texel, that
+    // cascade's high-frequency content aliases into per-pixel speckle —
+    // there are no float-texture mips on the fallback backend. This is
+    // manual mip logic: fwidth gives metres-per-pixel; each cascade fades
+    // out as the footprint crosses its texel (inside fftSlopes), and the
+    // noisy shading terms follow the mid cascade's kill.
     const footprint = max(fwidth(vWorldPos.x), fwidth(vWorldPos.z));
-    const detailKill = smoothstep(u.fftTexel.mul(0.5), u.fftTexel.mul(3.0), footprint);
+    const detailKill = smoothstep(u.texels.y.mul(0.5), u.texels.y.mul(3.0), footprint);
     const distRough = detailKill;
-    const keepDetail = oneMinus(detailKill);
 
-    // Normal assembly: FFT slopes (two scales) + swell slopes + micro detail.
-    const sFFT = fftSlopes(wxz, keepDetail);
+    // Normal assembly: per-cascade FFT slopes + swell slopes. The fine
+    // cascade replaces the old procedural detail-normal noise.
+    const sFFT = fftSlopes(wxz, footprint, float(1));
     // Far swell slopes stay resolvable but two pure sines read as synthetic
     // chevron bands from altitude — decorrelate by damping with distance.
     const sSwell = swellSlopes(wxz, footprint)
       .mul(mix(float(1.0), float(0.22), smoothstep(float(600), float(2000), camDistF)));
-    let slopes = sFFT.add(sSwell);
-    if (!lite) {
-      const detailAmp = u.detailNormal.mul(keepDetail);
-      const dn1 = mx_noise_float(vec3(wxz.mul(0.9), u.time.mul(0.7))).mul(detailAmp);
-      const dn2 = mx_noise_float(vec3(wxz.mul(2.3).add(31.7), u.time.mul(0.9))).mul(detailAmp.mul(0.6));
-      slopes = slopes.add(vec2(dn1, dn2));
-    }
+    const slopes = sFFT.add(sSwell);
     const nUp = normalize(vec3(slopes.x.negate(), 1, slopes.y.negate()));
 
     const V = normalize(cameraPosition.sub(vWorldPos));
     const NdotV = saturate(dot(nUp, V));
 
-    // Foam amount: advected persistent sim foam (primary tile only — the
-    // stretched ghost sample is gone; the lace texture supplies fine scale)
-    // + ambient windrow foam + shoreline contact band.
-    // The float foam field has no mips on the fallback backend and advection
-    // writes texel-scale structure into it, so a single sample speckles once
-    // the pixel footprint reaches the texel: take a 4-tap diagonal box blur
-    // scaled by footprint (a manual mip).
-    const foamBlurR = footprint.mul(0.4).add(u.fftTexel.mul(0.25));
-    const foamSim = normTex.sample(wxz.add(vec2(foamBlurR, foamBlurR)).div(u.tileSize)).w
-      .add(normTex.sample(wxz.add(vec2(foamBlurR.negate(), foamBlurR)).div(u.tileSize)).w)
-      .add(normTex.sample(wxz.add(vec2(foamBlurR, foamBlurR.negate())).div(u.tileSize)).w)
-      .add(normTex.sample(wxz.add(vec2(foamBlurR.negate(), foamBlurR.negate())).div(u.tileSize)).w)
+    // Foam amount: GPU-advected persistent foam (cascade-0 space) + ambient
+    // windrow foam + shoreline contact band.
+    // The half-float foam field has no mips on the fallback backend and
+    // advection writes texel-scale structure into it, so a single sample
+    // speckles once the pixel footprint reaches the texel: take a 4-tap
+    // diagonal box blur scaled by footprint (a manual mip).
+    const foamBlurR = footprint.mul(0.4).add(u.texels.x.mul(0.25));
+    const foamSim = foamTex.sample(wxz.add(vec2(foamBlurR, foamBlurR)).div(u.tiles.x)).x
+      .add(foamTex.sample(wxz.add(vec2(foamBlurR.negate(), foamBlurR)).div(u.tiles.x)).x)
+      .add(foamTex.sample(wxz.add(vec2(foamBlurR, foamBlurR.negate())).div(u.tiles.x)).x)
+      .add(foamTex.sample(wxz.add(vec2(foamBlurR.negate(), foamBlurR.negate())).div(u.tiles.x)).x)
       .mul(0.25);
     let ambFoam = float(0);
     if (!lite) {
@@ -301,7 +303,7 @@ export function makeOceanMaterial(u, deps) {
     // The foam field texture has no mips on the fallback backend; fade it
     // out once the pixel footprint exceeds its texel (later than the normal
     // detail kill — foam blobs are metres wide and survive further).
-    const foamKill = smoothstep(u.fftTexel.mul(1.5), u.fftTexel.mul(8.0), footprint);
+    const foamKill = smoothstep(u.texels.x.mul(1.5), u.texels.x.mul(8.0), footprint);
     // Shape the field: cut the low-value haze that advection smears across
     // whole convergence bands (it binarizes into dust), keep the mat cores.
     const foamShaped = saturate(foamSim.mul(1.3).sub(0.09));

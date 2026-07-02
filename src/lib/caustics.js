@@ -45,11 +45,9 @@ export const causticsNode = Fn(([worldXZ, t, scale]) => {
 function fieldUniforms() {
   return {
     time: uniform(0),
-    tileSize: uniform(256),
-    fftTexel: uniform(1),
-    secScale: uniform(3.17),
-    secAmp: uniform(0.7),
-    secNormWeight: uniform(0.45),
+    tiles: uniform(new THREE.Vector3(256, 59, 13)),
+    texels: uniform(new THREE.Vector3(1, 59 / 256, 13 / 256)),
+    detailNormal: uniform(0.3),
     swellA: uniform(new THREE.Vector4(1, 0, 0, 1)),
     swellB: uniform(new THREE.Vector4(1, 0, 0, 1)),
     swellC: uniform(new THREE.Vector4(1, 0, 0, 1)),
@@ -62,11 +60,9 @@ function fieldUniforms() {
 }
 
 function syncFieldUniforms(cu, waterU, swellSim) {
-  cu.tileSize.value = waterU.tileSize.value;
-  cu.fftTexel.value = waterU.fftTexel.value;
-  cu.secScale.value = waterU.secScale.value;
-  cu.secAmp.value = waterU.secAmp.value;
-  cu.secNormWeight.value = waterU.secNormWeight.value;
+  cu.tiles.value.copy(waterU.tiles.value);
+  cu.texels.value.copy(waterU.texels.value);
+  cu.detailNormal.value = waterU.detailNormal.value;
   const packs = ['swellA', 'swellB', 'swellC'];
   for (let i = 0; i < MAX_SWELL; i++) {
     cu[packs[i]].value.copy(waterU[packs[i]].value);
@@ -135,8 +131,8 @@ export function makeCausticsPass({ sim, mapSize = 768, gridSegments = 256, regio
   geo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
   geo.setIndex(new THREE.BufferAttribute(index, 1));
 
-  const dispTex = texture(sim.dispTexture);
-  const normTex = texture(sim.normTexture);
+  const dispTex = sim.dispTextures.map((t) => texture(t));
+  const normTex = sim.normTextures.map((t) => texture(t));
   const fields = makeFieldFns(cu, dispTex, normTex);
 
   const mat = new THREE.MeshBasicNodeMaterial({
@@ -152,7 +148,7 @@ export function makeCausticsPass({ sim, mapSize = 768, gridSegments = 256, regio
   const wxz = positionLocal.xz.mul(regionSize).add(cu.regionCenter);
   const disp = fields.fftDisp(wxz, gridSpacing).add(fields.swellDisp(wxz, gridSpacing));
   const surfP = vec3(wxz.x.add(disp.x), disp.y, wxz.y.add(disp.z));
-  const slopes = fields.fftSlopes(wxz, float(1)).add(fields.swellSlopes(wxz, gridSpacing));
+  const slopes = fields.fftSlopes(wxz, gridSpacing, float(1)).add(fields.swellSlopes(wxz, gridSpacing));
   const nrm = normalize(vec3(slopes.x.negate(), 1, slopes.y.negate()));
 
   const inc = cu.sunDir.negate(); // light travel direction

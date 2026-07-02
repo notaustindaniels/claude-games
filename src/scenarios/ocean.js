@@ -111,6 +111,33 @@ export async function init({ renderer, params }) {
     };
   }
 
+  // ?fieldprobe=1: read back the GPU sim's cascade-0 displacement field and
+  // report height channel stats (diagnostics).
+  if (params.get('fieldprobe') === '1') {
+    setTimeout(async () => {
+      try {
+        const rt = ocean.sim.dispRT[0];
+        const N = ocean.sim.N;
+        const buf = await renderer.readRenderTargetPixelsAsync(rt, 0, 0, N, N);
+        let mn = Infinity;
+        let mx = -Infinity;
+        let sum2 = 0;
+        for (let i = 0; i < N * N; i++) {
+          const h = buf[i * 4 + 1];
+          mn = Math.min(mn, h);
+          mx = Math.max(mx, h);
+          sum2 += h * h;
+        }
+        window.__OO.fieldProbe = {
+          min: +mn.toFixed(3), max: +mx.toFixed(3),
+          rms: +Math.sqrt(sum2 / (N * N)).toFixed(3),
+        };
+      } catch (e) {
+        window.__OO.fieldProbe = { error: String(e) };
+      }
+    }, 4000);
+  }
+
   // ?dumpshader=<meshName>: capture the compiled fragment shader for a mesh
   // (diagnostics; read back via window.__OO.shaderDump).
   const dumpName = params.get('dumpshader');
@@ -128,7 +155,7 @@ export async function init({ renderer, params }) {
 
   function hudExtra() {
     const s = window.__OO.stats || {};
-    const base = `preset=${ocean.config.name} sim=${s.simMs}ms${s.underwater ? ' UNDERWATER' : ''}`;
+    const base = `preset=${ocean.config.name} sim=${s.simMs}ms h=${s.camSurfaceH}${s.underwater ? ' UNDERWATER' : ''}`;
     return label ? `${label}\n${base}` : base;
   }
 
