@@ -105,6 +105,10 @@ const SWIZ = ['x', 'y', 'z'];
  */
 export function makeOceanMaterial(u, deps) {
   const { sim, skyColorFn, seabedTexture } = deps;
+  // lite: strip per-fragment noise (detail normals, ambient/contact foam
+  // texture, in-water caustics) — the dominant fragment cost in software
+  // rasterizers. Crest foam, Fresnel, absorption and swell remain.
+  const lite = !!deps.lite;
   const dispTex = texture(sim.dispTexture);
   const normTex = texture(sim.normTexture);
   const seabedTex = seabedTexture ? texture(seabedTexture) : null;
@@ -236,10 +240,13 @@ export function makeOceanMaterial(u, deps) {
     // chevron bands from altitude — decorrelate by damping with distance.
     const sSwell = swellSlopes(wxz, footprint)
       .mul(mix(float(1.0), float(0.22), smoothstep(float(600), float(2000), camDistF)));
-    const detailAmp = u.detailNormal.mul(keepDetail);
-    const dn1 = mx_noise_float(vec3(wxz.mul(0.9), u.time.mul(0.7))).mul(detailAmp);
-    const dn2 = mx_noise_float(vec3(wxz.mul(2.3).add(31.7), u.time.mul(0.9))).mul(detailAmp.mul(0.6));
-    const slopes = sFFT.add(sSwell).add(vec2(dn1, dn2));
+    let slopes = sFFT.add(sSwell);
+    if (!lite) {
+      const detailAmp = u.detailNormal.mul(keepDetail);
+      const dn1 = mx_noise_float(vec3(wxz.mul(0.9), u.time.mul(0.7))).mul(detailAmp);
+      const dn2 = mx_noise_float(vec3(wxz.mul(2.3).add(31.7), u.time.mul(0.9))).mul(detailAmp.mul(0.6));
+      slopes = slopes.add(vec2(dn1, dn2));
+    }
     const nUp = normalize(vec3(slopes.x.negate(), 1, slopes.y.negate()));
 
     const V = normalize(cameraPosition.sub(vWorldPos));
@@ -248,19 +255,26 @@ export function makeOceanMaterial(u, deps) {
     // Foam mask: persistent sim foam + ambient noise foam + shoreline contact.
     const foamSim = normTex.sample(wxz.div(u.tileSize)).w
       .add(normTex.sample(secUV(wxz)).w.mul(0.45));
-    const ambPat = mx_noise_float(vec3(wxz.mul(0.055), u.time.mul(0.05)))
-      .add(mx_noise_float(vec3(wxz.mul(0.14).add(7.3), u.time.mul(0.08))).mul(0.5));
-    const ambFoam = smoothstep(float(0.55), float(1.1), ambPat).mul(u.ambientFoam.mul(2.5));
+    let ambFoam = float(0);
+    if (!lite) {
+      const ambPat = mx_noise_float(vec3(wxz.mul(0.055), u.time.mul(0.05)))
+        .add(mx_noise_float(vec3(wxz.mul(0.14).add(7.3), u.time.mul(0.08))).mul(0.5));
+      ambFoam = smoothstep(float(0.55), float(1.1), ambPat).mul(u.ambientFoam.mul(2.5));
+    }
     const bedY = seabedHeight(wxz);
     const waterDepth = max(vWorldPos.y.sub(bedY), 0.0);
     const contactPulse = sin(u.time.mul(1.7).sub(waterDepth.mul(2.2))).mul(0.5).add(0.5);
-    const contactNoise = mx_noise_float(vec3(wxz.mul(0.35), u.time.mul(0.22))).mul(0.5).add(0.5);
+    const contactNoise = lite
+      ? float(0.5)
+      : mx_noise_float(vec3(wxz.mul(0.35), u.time.mul(0.22))).mul(0.5).add(0.5);
     const contactFoam = oneMinus(smoothstep(float(0), u.contactFoamDepth, waterDepth))
       .mul(contactNoise.mul(0.7).add(contactPulse.mul(0.5)))
       .mul(1.4);
     const foamRaw = saturate(foamSim.add(ambFoam).add(contactFoam)).mul(oneMinus(detailKill));
     // Fine pattern so foam reads as texture, not paint.
-    const foamPat = mx_noise_float(vec3(wxz.mul(1.4), u.time.mul(0.3))).mul(0.5).add(0.5);
+    const foamPat = lite
+      ? float(0.5)
+      : mx_noise_float(vec3(wxz.mul(1.4), u.time.mul(0.3))).mul(0.5).add(0.5);
     const foam = saturate(foamRaw.mul(foamPat.mul(0.6).add(0.55)).mul(1.25)).mul(
       smoothstep(float(0.06), float(0.5), foamRaw)
     );
@@ -285,8 +299,10 @@ export function makeOceanMaterial(u, deps) {
     const slant = waterDepth.div(max(abs(V.y), 0.12));
     const path = waterDepth.add(min(slant, waterDepth.mul(8).add(6)));
     const trans = exp(u.absorption.mul(path.negate()));
-    const caus = causticsNode(wxz, u.time, float(0.35))
-      .mul(oneMinus(smoothstep(float(0.5), float(6.0), waterDepth)));
+    const caus = lite
+      ? float(0)
+      : causticsNode(wxz, u.time, float(0.35))
+          .mul(oneMinus(smoothstep(float(0.5), float(6.0), waterDepth)));
     const sunFactor = saturate(u.sunDir.y.mul(2.5)).mul(u.sunIntensity);
     const sandColor = vec3(0.76, 0.7, 0.58).mul(caus.mul(0.55).add(0.75));
     const bodyColor = mix(u.scatterColor, sandColor.mul(sunFactor.mul(0.85).add(0.15)), trans);

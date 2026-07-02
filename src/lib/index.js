@@ -1,5 +1,5 @@
 // OpenOcean — standalone FFT ocean rendering system for three.js.
-// Public API: createOcean(renderer, scene, camera, options) → Ocean.
+// Public API: createOcean({ renderer, scene, camera, ...options }) → Ocean.
 import * as THREE from 'three/webgpu';
 import { OceanSim } from './OceanSim.js';
 import { makeSurfaceGeometry } from './OceanSurface.js';
@@ -23,7 +23,7 @@ const DEG = Math.PI / 180;
 /**
  * Create the ocean and attach it to the scene.
  *
- * const ocean = await createOcean(renderer, scene, camera, { preset: 'moderate' });
+ * const ocean = await createOcean({ renderer, scene, camera, preset: 'moderate' });
  * // per frame:
  * await ocean.update(dt);
  *
@@ -37,7 +37,11 @@ const DEG = Math.PI / 180;
  *   overrides: per-preset deep overrides ({ sim, water, sky, swell, secondary }),
  * }
  */
-export async function createOcean(renderer, scene, camera, options = {}) {
+export async function createOcean(options = {}) {
+  const { renderer, scene, camera } = options;
+  if (!renderer || !scene || !camera) {
+    throw new Error('createOcean requires { renderer, scene, camera }');
+  }
   const quality = QUALITY_TIERS[options.quality ?? 'medium'] ?? QUALITY_TIERS.medium;
   let cfg = resolvePreset(options.preset ?? 'moderate', options.overrides ?? {});
 
@@ -92,6 +96,7 @@ export async function createOcean(renderer, scene, camera, options = {}) {
     sim,
     skyColorFn,
     seabedTexture: options.seabed?.texture ?? null,
+    lite: (options.quality ?? 'medium') === 'low',
     reflection: reflectionEnabled
       ? {
           enabled: true,

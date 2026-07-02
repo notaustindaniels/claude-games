@@ -48,7 +48,8 @@ export async function init({ renderer, params }) {
 
   const seabed = params.get('seabed') === '0' ? null : makeSeabedTexture();
 
-  const ocean = await createOcean(renderer, scene, camera, {
+  const ocean = await createOcean({
+    renderer, scene, camera,
     preset: params.get('preset') || 'moderate',
     quality: params.get('quality') || 'medium',
     seed: num(params, 'seed', 1337),

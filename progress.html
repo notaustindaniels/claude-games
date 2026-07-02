@@ -33,5 +33,76 @@
   <div class="honest"><strong>Honest assessment:</strong> No water exists yet; every checklist item is FAIL. The harness itself is proven (frame rendered, screenshot captured, error reporting works). Backend note: headless verification will run on the WebGL2 fallback backend of WebGPURenderer; WebGPU device creation is broken under SwiftShader in this container. Worst remaining visual tell: there is no ocean.</div>
 </div>
 
+
+<div class="pass">
+  <h2>Pass 2 — 2026-07-02 — FFT ocean core: spectrum → worker IFFT → TSL water (W1, W2)</h2>
+  <p><strong>What changed:</strong> JONSWAP/Phillips spectra (fetch-limited, direction-spread) with radix-2 IFFT in a worker
+  (verified against a naive DFT and Hermitian-symmetry tests), displacement/normal/Jacobian/persistent-foam fields uploaded as
+  float textures; camera-following power-stretched grid to 30&nbsp;km; two-scale FFT sampling + 2-wave Gerstner swell; Fresnel/GGX/
+  Beer-Lambert/SSS shading; procedural sky. Anti-aliasing had to be built without float-texture mips (unsupported on the WebGL2
+  fallback): a per-vertex grid-spacing attribute fades each displacement component the local mesh cannot sample (killed moir&eacute;
+  chevrons that survived five naive distance-fade attempts), and an fwidth-based footprint kill converges all per-pixel noise
+  terms (foam, detail normals, Fresnel speckle) to smooth distant-sea values.</p>
+  <p>Evidence: <img src="shots/w1-wind-4.5.png" width="420"> <img src="shots/w1-wind-16.png" width="420">
+  <img src="shots/w2-altitude.png" width="420"> <img src="shots/check-storm.png" width="420"></p>
+  <div class="honest"><strong>Honest assessment vs reference bar:</strong> Wind 4.5 vs 16 m/s sea states are clearly different
+  (W1 PASS); high-altitude view shows no tile repetition (W2 PASS). Worst remaining tells a VFX supervisor would flag:
+  (1) faint residual banding rings 300&ndash;800&nbsp;m from a high camera in the swell fade zone; (2) the 16&nbsp;m/s sea reads
+  ~1.5&nbsp;m significant height rather than ~4&nbsp;m because the fixed 256&nbsp;m tile truncates long-wave energy (presets pair
+  tile size to wind to compensate); (3) storm whitecap coverage is patchier than a real Beaufort&nbsp;9 sea.</div>
+</div>
+
+<div class="pass">
+  <h2>Pass 3 — 2026-07-02 — Optics, reflections, foam, buoyancy (W3&ndash;W7)</h2>
+  <p><strong>What changed:</strong> Seabed redesigned with numerically-verified non-overlapping gaussians (previous layout created
+  a hidden land bridge that put two cameras inside terrain). Planar reflector proven with the lighthouse; contact-foam ring around
+  the island beach; ambient foam layer; Jacobian whitecaps; foam-freeze message proves persistent foam decays (~2&nbsp;s apart).
+  Crate floats with visible pitch on rough swells via 4-point height sampling; buoy bobs single-point.</p>
+  <p>Evidence: <img src="shots/w3-shallows.png" width="420"> <img src="shots/w3-grazing.png" width="420">
+  <img src="shots/w4-reflection.png" width="420"> <img src="shots/w5-whitecaps.png" width="420">
+  <img src="shots/w5-ambient.png" width="420"> <img src="shots/w5-shoreline.png" width="420">
+  <img src="shots/w6-foam-t0.png" width="420"> <img src="shots/w6-foam-t2.png" width="420">
+  <img src="shots/w7-crate-a.png" width="420"> <img src="shots/w7-buoy.png" width="420"></p>
+  <div class="honest"><strong>Honest assessment:</strong> W3 shallows show a bright turquoise&rarr;deep gradient but the frame
+  lacks a deep-water region for contrast in the same shot (the shoreline shot supplies it). W4 lighthouse reflection is clearly
+  visible; the island&rsquo;s own reflection is dim (physically defensible at that chop, but the reference product shows stronger
+  object reflections). The island rim reads slightly &ldquo;pancake&rdquo; from low cameras. Whitecaps are speckle-textured
+  rather than clumped like real spilling crests.</div>
+</div>
+
+<div class="pass">
+  <h2>Pass 4 — 2026-07-02 — Underwater mode + sun shafts (W8, W9), and a real backend bug</h2>
+  <p><strong>What changed:</strong> Underwater murk fog, waterline crossing wash (4-frame sequence, no hard cut), Worley caustics
+  on the seabed, Snell-window view of the surface from below, additive sun-shaft billboards. Root-caused a nasty platform bug with
+  a shader-dump diagnostic + pixel sampling: <em>shared float uniform nodes silently read 0 in second/third materials on the WebGL2
+  fallback backend</em> &mdash; the underwater fog wrapper now creates per-material uniform instances synced each frame. Also: a
+  submerged camera forces the underwater shading branch even on front-facing far triangles, and the sky dome drowns in murk (it
+  used to leak bright bands between seabed edge and surface).</p>
+  <p>Evidence: <img src="shots/w8-underwater.png" width="420"> <img src="shots/w8-waterline-b.png" width="420">
+  <img src="shots/w8-below-surface.png" width="420"> <img src="shots/w9-sunshafts.png" width="420"></p>
+  <div class="honest"><strong>Honest assessment:</strong> Caustics are convincing; fog gradient verified by pixel sampling
+  (192&rarr;110 across the frame). Tells: sunlit shallow sand is bright enough that the murk reads subtle in stills; the sun
+  shafts are visibly billboards if you look for hard edges; there is no volumetric scattering or surface-refracted godray motion.</div>
+</div>
+
+<div class="pass">
+  <h2>Pass 5 — 2026-07-02 — Determinism, presets, tiers, docs, consumer, robustness (W10&ndash;W14)</h2>
+  <p><strong>What changed:</strong> Determinism harness (two independent browser launches, same seed/time: <strong>0.0000%</strong>
+  pixel diff). 7-preset contact sheet. Quality tiers measured under SwiftShader: low 8.4&nbsp;fps @640&times;360 (after adding a
+  &ldquo;lite&rdquo; shader that strips per-fragment noise/caustics &mdash; 6.5&times; speedup), medium 0.60&nbsp;fps, high
+  0.45&nbsp;fps @960&times;540; sim step 6/25/150&nbsp;ms. API switched to <code>createOcean({renderer, scene, camera, ...})</code>;
+  README with 14-line quickstart, options/preset/tier tables, limitations; fresh-Vite consumer project installs the package and
+  renders with <strong>zero console errors</strong> (needed <code>resolve.dedupe: ['three']</code> for file: installs). Final
+  default-scene smoke: zero console errors.</p>
+  <p>Evidence: <img src="shots/w10-run1.png" width="420"> <img src="shots/w11-preset-contact-sheet.png" width="420">
+  <img src="shots/w12-low.png" width="420"> <img src="shots/w13-consumer.png" width="420">
+  <img src="shots/w14-default.png" width="420"></p>
+  <div class="honest"><strong>Honest assessment vs the reference bar:</strong> Feature checklist is met with real rendered
+  evidence for every item. Where it still trails a polished commercial product: whitecap clumping/spray sprites, refracted (rather
+  than procedural) caustics, wave-displaced reflections, and the medium/high tiers are GPU-class only &mdash; interactive software
+  rendering requires the low tier. The &ldquo;rough&rdquo; preset reads closer to a fresh breeze from low cameras and deserves a
+  future tuning pass.</div>
+</div>
+
 </body>
 </html>

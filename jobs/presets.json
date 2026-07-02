@@ -1,0 +1,86 @@
+[
+ {
+  "name": "preset-glassy",
+  "params": "scenario=ocean&fixeddt=1&dt=0.25&preset=glassy&seed=1337&seabed=0&lighthouse=0&crate=0&buoy=0&cam=0,9,0&look=105,3,-228&label=preset:+glassy",
+  "width": 800,
+  "height": 450,
+  "captures": [
+   {
+    "untilSimTime": 12,
+    "out": "shots/preset-glassy.png"
+   }
+  ]
+ },
+ {
+  "name": "preset-calm",
+  "params": "scenario=ocean&fixeddt=1&dt=0.25&preset=calm&seed=1337&seabed=0&lighthouse=0&crate=0&buoy=0&cam=0,9,0&look=105,3,-228&label=preset:+calm",
+  "width": 800,
+  "height": 450,
+  "captures": [
+   {
+    "untilSimTime": 12,
+    "out": "shots/preset-calm.png"
+   }
+  ]
+ },
+ {
+  "name": "preset-breeze",
+  "params": "scenario=ocean&fixeddt=1&dt=0.25&preset=breeze&seed=1337&seabed=0&lighthouse=0&crate=0&buoy=0&cam=0,9,0&look=105,3,-228&label=preset:+breeze",
+  "width": 800,
+  "height": 450,
+  "captures": [
+   {
+    "untilSimTime": 12,
+    "out": "shots/preset-breeze.png"
+   }
+  ]
+ },
+ {
+  "name": "preset-moderate",
+  "params": "scenario=ocean&fixeddt=1&dt=0.25&preset=moderate&seed=1337&seabed=0&lighthouse=0&crate=0&buoy=0&cam=0,9,0&look=105,3,-228&label=preset:+moderate",
+  "width": 800,
+  "height": 450,
+  "captures": [
+   {
+    "untilSimTime": 12,
+    "out": "shots/preset-moderate.png"
+   }
+  ]
+ },
+ {
+  "name": "preset-rough",
+  "params": "scenario=ocean&fixeddt=1&dt=0.25&preset=rough&seed=1337&seabed=0&lighthouse=0&crate=0&buoy=0&cam=0,9,0&look=105,3,-228&label=preset:+rough",
+  "width": 800,
+  "height": 450,
+  "captures": [
+   {
+    "untilSimTime": 12,
+    "out": "shots/preset-rough.png"
+   }
+  ]
+ },
+ {
+  "name": "preset-storm",
+  "params": "scenario=ocean&fixeddt=1&dt=0.25&preset=storm&seed=1337&seabed=0&lighthouse=0&crate=0&buoy=0&cam=0,9,0&look=105,3,-228&label=preset:+storm",
+  "width": 800,
+  "height": 450,
+  "captures": [
+   {
+    "untilSimTime": 12,
+    "out": "shots/preset-storm.png"
+   }
+  ]
+ },
+ {
+  "name": "preset-sunset",
+  "params": "scenario=ocean&fixeddt=1&dt=0.25&preset=sunset&seed=1337&seabed=0&lighthouse=0&crate=0&buoy=0&cam=0,9,0&look=105,3,-228&label=preset:+sunset",
+  "width": 800,
+  "height": 450,
+  "captures": [
+   {
+    "untilSimTime": 12,
+    "out": "shots/preset-sunset.png"
+   }
+  ]
+ }
+]
