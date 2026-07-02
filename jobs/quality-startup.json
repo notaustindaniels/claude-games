@@ -1,0 +1,9 @@
+[
+  {
+    "name": "startup-current-ocean",
+    "params": "scenario=ocean&preset=moderate&fixeddt=1&dt=0.25&seed=1337&cam=-38,14,64&look=30,0,-40&label=startup%20regression",
+    "width": 960,
+    "height": 540,
+    "captures": [{ "untilSimTime": 6, "out": "shots/q-startup-current.png" }]
+  }
+]

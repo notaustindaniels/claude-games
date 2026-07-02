@@ -104,5 +104,27 @@
   future tuning pass.</div>
 </div>
 
+<div class="entry" id="q-pass-1">
+  <h2>Q-Pass 1 — 2026-07-02 — QUALITY.md startup sequence executed</h2>
+  <p><strong>What was done:</strong> Read QUALITY.md, SPEC.md, this log, the full webgpu-threejs-tsl skill, all 21
+  reference stills, and the webgl-water-study technique files (NOTICE.txt respected: reimplement in TSL, no GLSL copying).
+  The Wallace caustics algorithm is understood: render the displaced water grid into a caustic map with vertices warped to
+  their refracted-ray seabed landing points; oldPos = flat-refraction landing, newPos = true-refraction landing; fragment
+  intensity = oldArea/newArea from screen-space derivatives of the two varyings. Re-proved the headless harness on this
+  machine (it moved from a Linux container to macOS — <code>launchBrowser()</code> now probes the ms-playwright cache and
+  system Chrome instead of hardcoding <code>/opt/pw-browsers/chromium</code>): one frame of the current ocean captured
+  below, WebGL2 fallback backend, zero console errors, before touching any simulation code.</p>
+  <div class="shots">
+    <figure><img src="shots/q-startup-current.png" alt="current ocean before quality pass" /><figcaption>shots/q-startup-current.png — current ocean (moderate preset), harness re-proof</figcaption></figure>
+  </div>
+  <div class="honest"><strong>Honest assessment vs reference stills:</strong> The gap inventory, worst first:
+  (1) foam is uniform per-pixel speckle with no spatial structure — the reference (ref_01, ref_26) shows connected lacy
+  mats with bubble holes that stretch and tear; (2) caustics are procedural Worley webs unrelated to the waves above
+  (ref_caustics shows crest-correlated dappling); (3) the CPU-worker FFT caps resolution/framerate and a single 256&nbsp;m
+  tile truncates long storm waves (storm reads ~1.5&nbsp;m seas, reference reads 4&nbsp;m+); (4) no crest glow into the
+  sun; (5) no spray at breaking crests, and the horizon whites out further than the reference haze; (6) the demo has no
+  user camera or preset switcher. Plan follows QUALITY.md priority: Q2 &gt; Q3 &gt; Q1 &gt; Q4 &gt; Q6 &gt; Q5.</div>
+</div>
+
 </body>
 </html>

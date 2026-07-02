@@ -54,10 +54,33 @@ export const CHROMIUM_ARGS = [
   '--disable-dev-shm-usage',
 ];
 
+/** First existing browser binary: env override, container path, newest
+ *  ms-playwright cache entry (macOS layout), system Chrome, else playwright
+ *  default resolution. */
+function findChromium() {
+  if (process.env.OO_CHROMIUM && fs.existsSync(process.env.OO_CHROMIUM)) {
+    return process.env.OO_CHROMIUM;
+  }
+  const candidates = ['/opt/pw-browsers/chromium'];
+  const cache = path.join(process.env.HOME || '', 'Library/Caches/ms-playwright');
+  if (fs.existsSync(cache)) {
+    const revs = fs.readdirSync(cache)
+      .filter((d) => /^chromium-\d+$/.test(d))
+      .sort((a, b) => Number(b.split('-')[1]) - Number(a.split('-')[1]));
+    for (const rev of revs) {
+      for (const sub of ['chrome-mac-arm64', 'chrome-mac']) {
+        candidates.push(path.join(cache, rev, sub, 'Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing'));
+        candidates.push(path.join(cache, rev, sub, 'Chromium.app/Contents/MacOS/Chromium'));
+      }
+    }
+  }
+  candidates.push('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
+  return candidates.find((c) => fs.existsSync(c));
+}
+
 export async function launchBrowser() {
-  const executablePath = '/opt/pw-browsers/chromium';
   return chromium.launch({
-    executablePath: fs.existsSync(executablePath) ? executablePath : undefined,
+    executablePath: findChromium(),
     headless: true,
     args: CHROMIUM_ARGS,
   });
