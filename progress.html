@@ -138,7 +138,7 @@
   still). The old secondary-tile foam ghost sample and per-pixel noise foam are gone; a footprint-scaled 4-tap blur
   stands in for the missing float-texture mips.</p>
   <div class="shots">
-    <figure><img src="shots/q2-foam-lifecycle.png" alt="foam lifecycle strip" /><figcaption>shots/q2-foam-lifecycle.png — same nadir window, storm preset, t = 11.75 / 13.5 / 15.25 / 19&nbsp;s: patch born at a crest, stretched downwind and torn, faded to wisps</figcaption></figure>
+    <figure><img src="shots/q2-foam-lifecycle.png" alt="foam lifecycle strip" /><figcaption>shots/q2-foam-lifecycle.png — same nadir window, storm preset, t = 19 / 20.5 / 24.5 / 27.5&nbsp;s: mat born at a breaking crest, grown and advected downwind, torn into filaments, decaying (re-shot on the final GPU-sim build in Q-Pass 8 — the original strip tracked a CPU-sim foam event whose location the GPU realization does not reproduce)</figcaption></figure>
     <figure><img src="shots/q2-foam-vs-ref.png" alt="ours vs reference foam" /><figcaption>shots/q2-foam-vs-ref.png — ours (left) vs reference foam (right, ref_26)</figcaption></figure>
   </div>
   <div class="honest"><strong>Honest assessment vs reference:</strong> Mats now read as connected lacy structures that
@@ -287,6 +287,46 @@
   the reference's spray reads instantly; (3) the reference's storm sea is churned white with wind-streaked foam almost
   everywhere — ours keeps distinct foam patches on a cleaner sea; (4) our haze keeps a faintly visible horizon line
   where ref_07's sea/sky boundary is fully swallowed.</div>
+</div>
+
+<div class="entry" id="q-pass-8">
+  <h2>Q-Pass 8 — 2026-07-02 — Regression suite: every W-item re-proven on the final build</h2>
+  <p><strong>What ran:</strong> All W-item evidence jobs re-shot on the final quality-pass build
+  (<code>w1-w2</code>, <code>w3-w6</code>, <code>w7-w9</code>, <code>w8-retake</code>, <code>retakes3</code>,
+  <code>presets</code>), plus <code>determinism.mjs</code>, <code>consumer-smoke.mjs</code> and <code>perf.mjs</code>.
+  Verdicts against the original W evidence: W1 wind response (flat at 4.5 m/s → h≈0.64 swell at 16 m/s) holds; W2
+  altitude anti-tiling holds (the coherent glitter banding is milder than the CPU build's); W3 turquoise shallows +
+  grazing Fresnel hold; W4 planar reflection holds; W5 whitecap/ambient/shoreline foam hold; W6 foam-freeze decay
+  holds (the frozen field now also advects while it decays — an improvement from Q2); W7 buoyancy holds — crate
+  pitches/rolls and the buoy sits at the waterline, with height queries now served by a 64² CPU mirror of the
+  structural cascade; W8 underwater fog/caustics and the waterline crossing hold; W9 sun shafts hold; W10 determinism:
+  <strong>0/518,400 differing pixels (0.0000%)</strong> across two independent launches of the final build; W13
+  consumer smoke: rebuilt against the packaged library, renders with <strong>zero console errors</strong>. Perf
+  re-measured under SwiftShader: sim step 2.3 / 2.8 / 3.5 ms for low/medium/high (the FFT is on the GPU now — the old
+  25–150 ms worker figures are obsolete) at 12.6 / 3.2 / 1.6 fps; README tables updated.</p>
+  <p><strong>Found and fixed during regression:</strong> the pixel-footprint estimate that drives every
+  anti-aliasing fade (cascade slope keeps, foam kill, roughness ramp) used the arithmetic mean of the two screen-space
+  derivative lengths. At grazing incidence the view-depth derivative dominates that mean, so the fades killed detail
+  whose cross-view frequency was still perfectly resolvable — from deck height the whole mid-field smeared into
+  featureless streaks (the W1/W5 re-shots made this stand out against the pre-cascade originals, whose far-field
+  "texture" was, honestly, unfiltered aliasing speckle that stills render flatteringly). Switched to the geometric
+  mean: grazing detail survives roughly twice as far out, near-nadir altitude views are unchanged, and no argmax
+  kinks. Verified against the committed Q1/Q4 evidence framings before adoption (<code>ab-*.png</code>). Q2's
+  lifecycle/closeup evidence — which predated the GPU sim — was re-shot on the final build around a current-sim
+  breaking event (t≈19–27.5 s) and all Q1/Q3/Q4/Q5 comparison panels were recomposed from final-build frames.</p>
+  <div class="shots">
+    <figure><img src="shots/regress-footprint.png" alt="footprint fix before/after" /><figcaption>shots/regress-footprint.png — same frame (wind 16 m/s, deck height): arithmetic-mean footprint (left) vs geometric-mean (right) — mid-field chop survives visibly further</figcaption></figure>
+    <figure><img src="shots/q2-foam-lifecycle.png" alt="reshot foam lifecycle" /><figcaption>shots/q2-foam-lifecycle.png — re-shot on the final build: birth at a breaking crest → growth/advection → filament tearing → decay</figcaption></figure>
+    <figure><img src="shots/w3-shallows.png" alt="W3 regression" /><figcaption>shots/w3-shallows.png — W3 re-shot: depth absorption + shallows unchanged</figcaption></figure>
+    <figure><img src="shots/w13-consumer.png" alt="consumer smoke" /><figcaption>shots/w13-consumer.png — consumer project on the packaged library, zero console errors</figcaption></figure>
+  </div>
+  <div class="honest"><strong>Honest assessment:</strong> Two W-item appearances changed and are noted rather than
+  hidden: (1) the far field is smoother than the pre-cascade build everywhere — the old build's distant "detail" was
+  aliasing speckle, and the filtered replacement is more correct but plainer; the geometric-mean footprint recovers
+  much of the mid-field, not all of it; (2) in the fixed W5a framing the rough-preset sea shows fewer simultaneous
+  whitecaps than the old CPU realization (one large mat + streaks vs several small flecks) — foam totals were retuned
+  in Q2 toward the reference's mat-and-lace look, and the Q2/Q5 evidence shows the current foam behaviour far better
+  than this one framing does. Everything else re-proves cleanly on the final build.</div>
 </div>
 
 </body>

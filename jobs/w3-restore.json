@@ -1,0 +1,14 @@
+[
+ {
+  "name": "w3-shallows",
+  "params": "scenario=ocean&fixeddt=1&dt=0.25&preset=calm&seed=1337&crate=0&buoy=0&lighthouse=0&cam=-10,26,160&look=-45,-25,112&label=W3a:+depth+absorption:+turquoise+shallows,+caustics",
+  "width": 960,
+  "height": 540,
+  "captures": [
+   {
+    "untilSimTime": 10,
+    "out": "shots/w3-shallows.png"
+   }
+  ]
+ }
+]

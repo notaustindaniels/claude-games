@@ -108,9 +108,9 @@ input-free determinism, which is unaffected because the camera only moves on inp
 
 | tier     | FFT    | grid segments | planar reflections | typical sim cost* |
 |----------|--------|---------------|--------------------|-------------------|
-| `low`    | 128²   | 128           | off (+ lite shader: no per-pixel noise/caustics) | ~6 ms |
-| `medium` | 256²   | 224           | on (0.35× res)     | ~25 ms |
-| `high`   | 512²   | 320           | on (0.5× res)      | ~150 ms |
+| `low`    | 128²   | 128           | off (+ lite shader: no per-pixel noise/caustics) | ~2.3 ms |
+| `medium` | 256²   | 224           | on (0.35× res)     | ~2.8 ms |
+| `high`   | 512²   | 320           | on (0.5× res)      | ~3.5 ms |
 
 *Render-thread cost per sim step measured under software rendering (SwiftShader).
 The FFT itself runs on the GPU (fragment-shader ping-pong); the per-step CPU work is
@@ -147,5 +147,5 @@ console errors. See `progress.html` for the pass-by-pass evidence log.
   floaters track the swell and big waves, not ripples.
 - **Crest spray is deliberately sparse** — visible puffs at breaking crests in
   rough/storm, not the rain-lashed white-out of a hurricane reference frame (no rain).
-- **SwiftShader interactive rate requires the `low` tier** (~8 fps at 640×360 in the
-  verification container); `medium`/`high` are meant for real GPUs.
+- **SwiftShader interactive rate requires the `low` tier** (~13 fps at 640×360 under
+  software rendering); `medium`/`high` are meant for real GPUs.

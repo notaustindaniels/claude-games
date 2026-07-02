@@ -1,0 +1,34 @@
+[
+ {
+  "name": "q2r-strip",
+  "params": "scenario=ocean&preset=storm&fixeddt=1&dt=0.25&seed=1337&seabed=0&lighthouse=0&crate=0&buoy=0&cam=17,34,1&look=20,0,-2&sunaz=305&hud=0",
+  "width": 960,
+  "height": 720,
+  "captures": [
+   {
+    "untilSimTime": 17.5,
+    "out": "shots/q2r-a.png"
+   },
+   {
+    "untilSimTime": 19,
+    "out": "shots/q2r-b.png"
+   },
+   {
+    "untilSimTime": 20.5,
+    "out": "shots/q2r-c.png"
+   },
+   {
+    "untilSimTime": 22,
+    "out": "shots/q2r-d.png"
+   },
+   {
+    "untilSimTime": 24.5,
+    "out": "shots/q2r-e.png"
+   },
+   {
+    "untilSimTime": 27.5,
+    "out": "shots/q2r-f.png"
+   }
+  ]
+ }
+]
