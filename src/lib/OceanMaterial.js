@@ -57,7 +57,7 @@ export function makeOceanUniforms(cfg) {
     fogEnd: uniform(9000),
     // Reflection.
     reflectionStrength: uniform(1),
-    reflDistortion: uniform(0.05),
+    reflDistortion: uniform(0.09),
     // Underwater.
     uwFogColor: uniform(new THREE.Color(0x0b3d54)),
     uwFogDensity: uniform(0.028),
@@ -383,15 +383,28 @@ export function makeOceanMaterial(u, deps) {
     const sandColor = vec3(0.76, 0.7, 0.58).mul(caus.mul(0.55).add(0.75));
     const bodyColor = mix(u.scatterColor, sandColor.mul(sunFactor.mul(0.85).add(0.15)), trans);
 
-    // Subsurface scattering on backlit wave flanks.
+    // Crest light transport: subsurface scattering strongest where the
+    // camera looks toward the sun THROUGH a thin elevated crest. The
+    // Jacobian (w of the displacement fields) marks folded/compressed
+    // surface — combined with wave height it is the thin-crest proxy.
+    const j0 = dispTex[0].sample(wxz.div(u.tiles.x)).w;
+    const j1 = dispTex[1].sample(wxz.div(u.tiles.y)).w;
+    const crestFold = saturate(oneMinus(min(j0, j1.mul(1.05))).mul(0.85));
+    const thinCrest = crestFold.mul(saturate(vWaveHeight.mul(0.55).add(0.1)));
     const sunHoriz = normalize(vec3(u.sunDir.x, 0, u.sunDir.z));
     const towardSun = saturate(dot(V.negate(), sunHoriz));
     const heightBoost = mix(saturate(vWaveHeight.mul(0.35).add(0.4)), float(0.45), detailKill);
     const grazing = pow(oneMinus(NdotV), float(2.0));
+    // SSS gets its own sun gate: backlight transmission PEAKS at low sun
+    // (light passes through the crest toward the camera) — the body-light
+    // sunFactor would kill it exactly then.
+    const sssSun = smoothstep(float(-0.02), float(0.12), u.sunDir.y).mul(u.sunIntensity);
     const sss = u.sssColor.mul(
-      pow(towardSun, float(3.0)).mul(heightBoost).mul(u.sssStrength)
-        .mul(grazing.mul(0.85).add(0.15)).mul(sunFactor)
-    ).mul(oneMinus(distRough.mul(0.75)));
+      pow(towardSun, float(2.0))
+        .mul(heightBoost.mul(0.55).add(thinCrest.mul(3.2)))
+        .mul(u.sssStrength)
+        .mul(grazing.mul(0.8).add(0.2)).mul(sssSun)
+    ).mul(oneMinus(distRough.mul(0.3)));
 
     // Specular sun glint (GGX distribution + Schlick fresnel, simple vis).
     const L = u.sunDir;
@@ -406,7 +419,12 @@ export function makeOceanMaterial(u, deps) {
     const spec = u.sunColor.mul(D.mul(FH).mul(NdotL).mul(0.25).mul(u.sunIntensity));
 
     // Compose (above-water).
-    let water = mix(bodyColor.add(sss), reflColor, fres.mul(u.reflectionStrength));
+    // SSS is added AFTER the fresnel mix: transmitted crest light exits
+    // toward the camera regardless of the surface reflectance, and the
+    // grazing fresnel would otherwise crush it exactly where backlit crests
+    // glow (into-the-sun views).
+    let water = mix(bodyColor, reflColor, fres.mul(u.reflectionStrength))
+      .add(sss.mul(oneMinus(fres.mul(0.55))));
     if (laceTex) {
       // Translucent foam film: where foam amount exists but the lace mat has
       // torn away, the surface keeps a milky green-white stain (the

@@ -214,5 +214,27 @@
   cascade, closing Q3's main stated gap.</div>
 </div>
 
+<div class="entry" id="q-pass-5">
+  <h2>Q-Pass 5 — 2026-07-02 — Q4: crest light transport</h2>
+  <p><strong>What changed:</strong> Subsurface scattering is now crest-aware and correctly composed: the Jacobian of the
+  two structural cascades (folded, compressed surface) times elevation forms a thin-crest proxy that drives transmission
+  glow; SSS gets its own sun gate (backlight peaks at LOW sun — the body-light gate used to kill it exactly then) and is
+  added AFTER the fresnel mix (grazing fresnel was crushing transmitted light to ~10% in into-the-sun views, which is
+  where crests glow). Wave-displaced reflections: the planar reflection lookup is perturbed by the full cascade slope
+  field with distortion raised to 0.09 — the island and lighthouse reflections visibly bend through the swell.</p>
+  <div class="shots">
+    <figure><img src="shots/q4-into-sun.png" alt="into the sun crest glow" /><figcaption>shots/q4-into-sun.png — rough preset, sun 7°: backlit crest ridge glows emerald against the sky</figcaption></figure>
+    <figure><img src="shots/q4-sss-vs-ref.png" alt="sss vs reference" /><figcaption>shots/q4-sss-vs-ref.png — ours (left) vs ref_01 teal wave faces</figcaption></figure>
+    <figure><img src="shots/q4-refl-vs-ref.png" alt="reflection vs reference" /><figcaption>shots/q4-refl-vs-ref.png — wave-displaced lighthouse/island reflection (left) vs ref_14 ship reflection</figcaption></figure>
+  </div>
+  <div class="honest"><strong>Honest assessment vs reference:</strong> The backlit ridge glows and the whole sea takes
+  the luminous teal cast toward the sun that ref_01 shows. Still short: (1) the reference's crest TIPS light up
+  bright-green like neon edges — ours glows as a broad emerald band, not a razor rim (a curvature-sharpened term needs
+  finer normal curvature than our texel pitch resolves); (2) our into-the-sun sea is smoother than the reference's
+  churned surface, so fewer distinct crests present themselves; (3) the island reflection displaces smoothly but tears
+  less than ref_14's chop-shredded ship reflection (calm-preset water in our shot), and the reflection edge shows mild
+  stair-stepping from the 0.35-resolution reflector target.</div>
+</div>
+
 </body>
 </html>

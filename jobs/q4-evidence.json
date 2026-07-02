@@ -1,0 +1,26 @@
+[
+ {
+  "name": "q4-into-sun",
+  "params": "scenario=ocean&preset=rough&fixeddt=1&dt=0.25&seed=1337&seabed=0&lighthouse=0&crate=0&buoy=0&cam=0,2.6,0&look=16,3.4,23&sunel=7&sunaz=35&hud=0",
+  "width": 960,
+  "height": 540,
+  "captures": [
+   {
+    "untilSimTime": 10,
+    "out": "shots/q4-into-sun.png"
+   }
+  ]
+ },
+ {
+  "name": "q4-reflection",
+  "params": "scenario=ocean&preset=calm&fixeddt=1&dt=0.25&seed=1337&crate=0&buoy=0&cam=60,5,-40&look=170,14,-230&sunel=30&hud=0",
+  "width": 960,
+  "height": 540,
+  "captures": [
+   {
+    "untilSimTime": 8,
+    "out": "shots/q4-reflection.png"
+   }
+  ]
+ }
+]

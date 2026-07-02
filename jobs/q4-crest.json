@@ -1,0 +1,13 @@
+[
+  {
+    "name": "q4-crest-hunt",
+    "params": "scenario=ocean&preset=rough&fixeddt=1&dt=0.25&seed=1337&seabed=0&lighthouse=0&crate=0&buoy=0&cam=0,2.6,0&look=16,2.8,23&sunel=7&sunaz=35&chop=1.7&hud=0",
+    "width": 960,
+    "height": 540,
+    "captures": [
+      { "untilSimTime": 8, "out": "shots/q4-crest-a.png" },
+      { "untilSimTime": 10.5, "out": "shots/q4-crest-b.png" },
+      { "untilSimTime": 13, "out": "shots/q4-crest-c.png" }
+    ]
+  }
+]
