@@ -58,8 +58,9 @@ export function makeOceanUniforms(cfg) {
     reflectionStrength: uniform(1),
     reflDistortion: uniform(0.05),
     // Underwater.
-    uwFogColor: uniform(new THREE.Color(0x06283c)),
+    uwFogColor: uniform(new THREE.Color(0x0b3d54)),
     uwFogDensity: uniform(0.028),
+    camSubmerged: uniform(0),
   };
 }
 
@@ -332,7 +333,11 @@ export function makeOceanMaterial(u, deps) {
     const horizonCol = skyColorFn(normalize(vec3(V.x.negate(), 0.015, V.z.negate())));
     const aboveFogged = mix(above, horizonCol, fogF);
 
-    return select(frontFacing, aboveFogged, belowFogged);
+    // A submerged camera must get the underwater treatment even for
+    // front-facing far triangles (displaced geometry can present its top
+    // face from below, which would otherwise render bright horizon fog).
+    const useAbove = frontFacing.and(u.camSubmerged.lessThan(0.5));
+    return select(useAbove, aboveFogged, belowFogged);
   })();
 
   return material;

@@ -4,7 +4,7 @@
 import * as THREE from 'three/webgpu';
 import {
   Fn, vec2, vec3, float, positionWorld, mix, saturate, smoothstep, dot,
-  normalize, normalLocal, uniform, mul,
+  normalize, normalLocal, uniform, mul, cameraPosition, oneMinus, exp,
 } from 'three/tsl';
 import { causticsNode } from '../lib/index.js';
 
@@ -18,8 +18,8 @@ export function seabedHeight(x, z) {
   };
   let h = -42;
   h += 60 * g(170, -230, 115); // island (breaks the surface)
-  h += 26 * g(-260, 140, 210); // shallow turquoise bank (peak ≈ -16)
-  h += 34 * g(60, -40, 150); // nearshore shelf by the origin (peak ≈ -8)
+  h += 26 * g(-320, 260, 180); // shallow turquoise bank (peak ≈ -14)
+  h += 32 * g(-40, 120, 130); // nearshore shelf NW of origin (peak ≈ -5)
   // gentle dunes for caustic/absorption interest
   h += 1.6 * Math.sin(x * 0.05) * Math.sin(z * 0.043 + 1.7);
   return h;
@@ -60,7 +60,7 @@ export function makeSeabedMesh(ocean) {
   const mat = new THREE.MeshBasicNodeMaterial({ fog: false });
   const time = ocean.uniforms.time;
   mat.colorNode = ocean.wrapUnderwaterFog(
-    Fn(() => {
+    () => {
       const wp = positionWorld;
       // Sand → grass gradient above water, sand below.
       const sand = vec3(0.72, 0.66, 0.5);
@@ -75,8 +75,8 @@ export function makeSeabedMesh(ocean) {
       const causStrength = smoothstep(float(-0.5), float(1.5), depth)
         .mul(smoothstep(float(26), float(4), depth));
       const caus = causticsNode(wp.xz, time, float(0.45)).mul(causStrength);
-      return baseCol.mul(ndl).mul(caus.mul(0.9).add(1.0));
-    })()
+      return baseCol.mul(ndl).mul(caus.mul(0.5).add(0.82));
+    }
   );
 
   const mesh = new THREE.Mesh(geo, mat);

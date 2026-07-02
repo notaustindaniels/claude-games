@@ -37,11 +37,22 @@ export function makeUnderwaterOverlay(u) {
  * color. `enabled` is a uniform the ocean drives (camera submerged).
  */
 export function makeUnderwaterFogWrapper(u) {
-  const enabled = uniform(0);
-  const wrap = (colorNode) => Fn(() => {
-    const dist = length(positionWorld.sub(cameraPosition));
-    const f = oneMinus(exp(dist.mul(u.uwFogDensity).negate()));
-    return mix(colorNode, vec3(u.uwFogColor), f.mul(enabled));
-  })();
-  return { wrap, enabled };
+  // Shared float uniform nodes proved unreliable across multiple node
+  // materials on the WebGL2 fallback backend (they silently read 0 in some
+  // materials), so each wrapped material gets its OWN enabled/density
+  // uniforms, kept in sync every frame via setEnabled/setDensity.
+  const instances = [];
+  const wrap = (buildColor) => {
+    const inst = { enabled: uniform(0), density: uniform(0.045) };
+    instances.push(inst);
+    return Fn(() => {
+      const base = typeof buildColor === 'function' ? buildColor() : buildColor;
+      const dist = length(positionWorld.sub(cameraPosition));
+      const f = oneMinus(exp(dist.mul(inst.density).negate()));
+      return mix(base, vec3(u.uwFogColor), f.mul(inst.enabled));
+    })();
+  };
+  const setEnabled = (v) => instances.forEach((i) => (i.enabled.value = v));
+  const setDensity = (v) => instances.forEach((i) => (i.density.value = v));
+  return { wrap, setEnabled, setDensity };
 }

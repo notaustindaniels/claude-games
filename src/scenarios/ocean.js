@@ -109,6 +109,21 @@ export async function init({ renderer, params }) {
     };
   }
 
+  // ?dumpshader=<meshName>: capture the compiled fragment shader for a mesh
+  // (diagnostics; read back via window.__OO.shaderDump).
+  const dumpName = params.get('dumpshader');
+  if (dumpName) {
+    setTimeout(async () => {
+      const target = scene.getObjectByName(dumpName);
+      if (target) {
+        const { fragmentShader, vertexShader } = await renderer.debug.getShaderAsync(scene, camera, target);
+        window.__OO.shaderDump = { fragmentShader, vertexShader };
+      } else {
+        window.__OO.shaderDump = { error: 'mesh not found: ' + dumpName };
+      }
+    }, 3000);
+  }
+
   function hudExtra() {
     const s = window.__OO.stats || {};
     const base = `preset=${ocean.config.name} sim=${s.simMs}ms${s.underwater ? ' UNDERWATER' : ''}`;

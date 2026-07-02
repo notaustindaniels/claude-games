@@ -1,0 +1,62 @@
+[
+ {
+  "name": "w8-underwater",
+  "params": "scenario=ocean&fixeddt=1&dt=0.25&preset=calm&seed=1337&lighthouse=0&crate=0&buoy=0&cam=-10,-5,80&look=-45,-14,125&label=W8:+underwater:+fog+++caustics+on+seabed",
+  "width": 960,
+  "height": 540,
+  "captures": [
+   {
+    "untilSimTime": 10,
+    "out": "shots/w8-underwater.png"
+   }
+  ]
+ },
+ {
+  "name": "w8-waterline",
+  "params": "scenario=ocean&fixeddt=1&dt=0.25&preset=calm&seed=1337&lighthouse=0&crate=0&buoy=0&cam=-10,0.05,80&look=-45,-6,125&label=W8b:+waterline+transition+(camera+crossing)",
+  "width": 960,
+  "height": 540,
+  "captures": [
+   {
+    "untilSimTime": 10,
+    "out": "shots/w8-waterline-a.png"
+   },
+   {
+    "untilSimTime": 10.75,
+    "out": "shots/w8-waterline-b.png"
+   },
+   {
+    "untilSimTime": 11.5,
+    "out": "shots/w8-waterline-c.png"
+   },
+   {
+    "untilSimTime": 12.25,
+    "out": "shots/w8-waterline-d.png"
+   }
+  ]
+ },
+ {
+  "name": "w8-below-surface",
+  "params": "scenario=ocean&fixeddt=1&dt=0.25&preset=calm&seed=1337&lighthouse=0&crate=0&buoy=0&cam=-10,-5,80&look=15,3,55&label=W8c:+surface+from+below+(Snell+window)",
+  "width": 960,
+  "height": 540,
+  "captures": [
+   {
+    "untilSimTime": 10,
+    "out": "shots/w8-below-surface.png"
+   }
+  ]
+ },
+ {
+  "name": "w9-shafts",
+  "params": "scenario=ocean&fixeddt=1&dt=0.25&preset=calm&sunel=35&seed=1337&lighthouse=0&crate=0&buoy=0&cam=-10,-7,80&look=10,-2,40&label=W9:+underwater+sun+shafts",
+  "width": 960,
+  "height": 540,
+  "captures": [
+   {
+    "untilSimTime": 10,
+    "out": "shots/w9-sunshafts.png"
+   }
+  ]
+ }
+]

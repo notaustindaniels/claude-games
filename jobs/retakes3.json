@@ -1,0 +1,38 @@
+[
+ {
+  "name": "w3-shallows",
+  "params": "scenario=ocean&fixeddt=1&dt=0.25&preset=calm&seed=1337&crate=0&buoy=0&lighthouse=0&cam=60,28,210&look=-60,-10,90&label=W3a:+depth+absorption:+turquoise+shallows,+caustics",
+  "width": 960,
+  "height": 540,
+  "captures": [
+   {
+    "untilSimTime": 10,
+    "out": "shots/w3-shallows.png"
+   }
+  ]
+ },
+ {
+  "name": "w5-shoreline",
+  "params": "scenario=ocean&fixeddt=1&dt=0.25&preset=breeze&seed=1337&crate=0&buoy=0&lighthouse=0&cam=30,20,-120&look=95,-2,-215&label=W5c:+shoreline+contact+foam",
+  "width": 960,
+  "height": 540,
+  "captures": [
+   {
+    "untilSimTime": 10,
+    "out": "shots/w5-shoreline.png"
+   }
+  ]
+ },
+ {
+  "name": "w4-reflection",
+  "params": "scenario=ocean&fixeddt=1&dt=0.25&preset=calm&quality=high&seed=1337&crate=0&buoy=0&cam=15,10,-70&look=170,15,-230&label=W4:+planar+reflection+of+lighthouse",
+  "width": 960,
+  "height": 540,
+  "captures": [
+   {
+    "untilSimTime": 8,
+    "out": "shots/w4-reflection.png"
+   }
+  ]
+ }
+]

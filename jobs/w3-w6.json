@@ -1,0 +1,90 @@
+[
+ {
+  "name": "w3-shallows",
+  "params": "scenario=ocean&fixeddt=1&dt=0.25&preset=calm&seed=1337&crate=0&buoy=0&cam=20,30,30&look=70,-10,-50&label=W3a:+depth+absorption:+turquoise+shallows,+caustics",
+  "width": 960,
+  "height": 540,
+  "captures": [
+   {
+    "untilSimTime": 10,
+    "out": "shots/w3-shallows.png"
+   }
+  ]
+ },
+ {
+  "name": "w3-grazing",
+  "params": "scenario=ocean&fixeddt=1&dt=0.25&preset=moderate&seed=1337&seabed=0&lighthouse=0&crate=0&buoy=0&cam=-300,3.5,300&look=-130,0,-70&label=W3b:+grazing+Fresnel+++GGX+sun+glint",
+  "width": 960,
+  "height": 540,
+  "captures": [
+   {
+    "untilSimTime": 10,
+    "out": "shots/w3-grazing.png"
+   }
+  ]
+ },
+ {
+  "name": "w4-reflection",
+  "params": "scenario=ocean&fixeddt=1&dt=0.25&preset=glassy&seed=1337&crate=0&buoy=0&cam=75,7,-95&look=170,12,-230&label=W4:+planar+reflection+of+lighthouse",
+  "width": 960,
+  "height": 540,
+  "captures": [
+   {
+    "untilSimTime": 8,
+    "out": "shots/w4-reflection.png"
+   }
+  ]
+ },
+ {
+  "name": "w5-whitecaps",
+  "params": "scenario=ocean&fixeddt=1&dt=0.25&preset=rough&seed=1337&seabed=0&lighthouse=0&crate=0&buoy=0&ambfoam=0&cam=0,45,0&look=130,0,-130&label=W5a:+whitecap+crest+foam+(Jacobian+folding)",
+  "width": 960,
+  "height": 540,
+  "captures": [
+   {
+    "untilSimTime": 14,
+    "out": "shots/w5-whitecaps.png"
+   }
+  ]
+ },
+ {
+  "name": "w5-ambient",
+  "params": "scenario=ocean&fixeddt=1&dt=0.25&preset=breeze&seed=1337&seabed=0&lighthouse=0&crate=0&buoy=0&foamgain=0&ambfoam=0.3&cam=0,25,0&look=90,0,-90&label=W5b:+ambient+surface+foam+layer",
+  "width": 960,
+  "height": 540,
+  "captures": [
+   {
+    "untilSimTime": 10,
+    "out": "shots/w5-ambient.png"
+   }
+  ]
+ },
+ {
+  "name": "w5-shoreline",
+  "params": "scenario=ocean&fixeddt=1&dt=0.25&preset=breeze&seed=1337&crate=0&buoy=0&cam=90,25,-120&look=170,0,-230&label=W5c:+shoreline+contact+foam",
+  "width": 960,
+  "height": 540,
+  "captures": [
+   {
+    "untilSimTime": 10,
+    "out": "shots/w5-shoreline.png"
+   }
+  ]
+ },
+ {
+  "name": "w6-foam-decay",
+  "params": "scenario=ocean&fixeddt=1&dt=0.25&preset=rough&seed=1337&seabed=0&lighthouse=0&crate=0&buoy=0&ambfoam=0&foamfreeze=10&cam=0,40,0&look=80,0,-80&label=W6:+persistent+foam+decay+(injection+frozen+at+t=10)",
+  "width": 960,
+  "height": 540,
+  "captures": [
+   {
+    "untilSimTime": 10.5,
+    "out": "shots/w6-foam-t0.png"
+   },
+   {
+    "untilSimTime": 12.5,
+    "out": "shots/w6-foam-t2.png"
+   }
+  ]
+ }
+]

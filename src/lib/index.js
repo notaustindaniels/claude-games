@@ -6,6 +6,7 @@ import { makeSurfaceGeometry } from './OceanSurface.js';
 import { makeOceanUniforms, makeOceanMaterial, applyConfigToUniforms } from './OceanMaterial.js';
 import { makeSkyColorFn, makeSkyDome } from './sky.js';
 import { makeUnderwaterOverlay, makeUnderwaterFogWrapper } from './underwater.js';
+import { makeSunShafts } from './sunshafts.js';
 import { resolvePreset, PRESETS, PRESET_NAMES } from './presets.js';
 import { causticsNode } from './caustics.js';
 
@@ -115,6 +116,18 @@ export async function createOcean(renderer, scene, camera, options = {}) {
   const overlay = makeUnderwaterOverlay(u);
   scene.add(overlay.mesh);
   const fogWrapper = makeUnderwaterFogWrapper(u);
+  if (skyDome) {
+    // The sky must drown in murk too, or it shows through as bright bands
+    // between the seabed edge and the surface when submerged.
+    const domeBase = skyDome.material.colorNode;
+    skyDome.material.colorNode = fogWrapper.wrap(() => domeBase);
+  }
+
+  let sunShafts = null;
+  if (options.sunShafts !== false) {
+    sunShafts = makeSunShafts(u);
+    scene.add(sunShafts.group);
+  }
 
   function applySun(cfgSky) {
     const el = cfgSky.sunElevation * DEG;
@@ -154,9 +167,24 @@ export async function createOcean(renderer, scene, camera, options = {}) {
       const band = 0.35;
       const sub = 1 - Math.min(1, Math.max(0, (rel + band) / (2 * band)));
       overlay.submergence.value = sub;
-      fogWrapper.enabled.value = rel < 0 ? 1 : 0;
+      fogWrapper.setEnabled(rel < 0 ? 1 : 0);
+      u.camSubmerged.value = rel < 0 ? 1 : 0;
       this.underwater = rel < 0;
       this.cameraSurfaceHeight = h;
+      if (sunShafts) {
+        sunShafts.intensity.value = sub;
+        sunShafts.group.visible = sub > 0.02;
+        if (sunShafts.group.visible) {
+          // Park the shaft fan a little ahead of the camera, offset toward
+          // the sun so the shafts read as coming from the light.
+          const s = u.sunDir.value;
+          sunShafts.group.position.set(
+            camera.position.x + s.x * 25,
+            0,
+            camera.position.z + s.z * 25
+          );
+        }
+      }
     },
 
     /** Water surface height at world (x, z) — CPU, matches the render. */

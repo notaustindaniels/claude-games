@@ -1,0 +1,90 @@
+[
+ {
+  "name": "w3-shallows",
+  "params": "scenario=ocean&fixeddt=1&dt=0.25&preset=calm&seed=1337&crate=0&buoy=0&lighthouse=0&cam=-10,26,160&look=-45,-25,112&label=W3a:+depth+absorption:+turquoise+shallows,+caustics",
+  "width": 960,
+  "height": 540,
+  "captures": [
+   {
+    "untilSimTime": 10,
+    "out": "shots/w3-shallows.png"
+   }
+  ]
+ },
+ {
+  "name": "w7-crate",
+  "params": "scenario=ocean&fixeddt=1&dt=0.25&preset=rough&seed=1337&lighthouse=0&buoy=0&cam=-40,9,38&look=-12,0,8&label=W7a:+multi-point+buoyancy:+crate+pitch/roll",
+  "width": 960,
+  "height": 540,
+  "captures": [
+   {
+    "untilSimTime": 11,
+    "out": "shots/w7-crate-a.png"
+   },
+   {
+    "untilSimTime": 12.5,
+    "out": "shots/w7-crate-b.png"
+   }
+  ]
+ },
+ {
+  "name": "w7-buoy",
+  "params": "scenario=ocean&fixeddt=1&dt=0.25&preset=moderate&seed=1337&lighthouse=0&crate=0&cam=38,5,10&look=18,1,-6&label=W7b:+single-point+buoyancy:+bobbing+buoy",
+  "width": 960,
+  "height": 540,
+  "captures": [
+   {
+    "untilSimTime": 11,
+    "out": "shots/w7-buoy.png"
+   }
+  ]
+ },
+ {
+  "name": "w8-underwater",
+  "params": "scenario=ocean&fixeddt=1&dt=0.25&preset=calm&seed=1337&lighthouse=0&crate=0&buoy=0&cam=-10,-5,80&look=-45,-14,125&label=W8:+underwater:+fog+++caustics+on+seabed",
+  "width": 960,
+  "height": 540,
+  "captures": [
+   {
+    "untilSimTime": 10,
+    "out": "shots/w8-underwater.png"
+   }
+  ]
+ },
+ {
+  "name": "w8-waterline",
+  "params": "scenario=ocean&fixeddt=1&dt=0.25&preset=calm&seed=1337&lighthouse=0&crate=0&buoy=0&cam=-10,-0.12,80&look=-45,-6,125&label=W8b:+waterline+transition+(camera+crossing)",
+  "width": 960,
+  "height": 540,
+  "captures": [
+   {
+    "untilSimTime": 10,
+    "out": "shots/w8-waterline.png"
+   }
+  ]
+ },
+ {
+  "name": "w8-below-surface",
+  "params": "scenario=ocean&fixeddt=1&dt=0.25&preset=calm&seed=1337&lighthouse=0&crate=0&buoy=0&cam=-10,-5,80&look=15,3,55&label=W8c:+surface+from+below+(Snell+window)",
+  "width": 960,
+  "height": 540,
+  "captures": [
+   {
+    "untilSimTime": 10,
+    "out": "shots/w8-below-surface.png"
+   }
+  ]
+ },
+ {
+  "name": "w9-shafts",
+  "params": "scenario=ocean&fixeddt=1&dt=0.25&preset=calm&sunel=35&seed=1337&lighthouse=0&crate=0&buoy=0&cam=-10,-7,80&look=10,-2,40&label=W9:+underwater+sun+shafts",
+  "width": 960,
+  "height": 540,
+  "captures": [
+   {
+    "untilSimTime": 10,
+    "out": "shots/w9-sunshafts.png"
+   }
+  ]
+ }
+]
