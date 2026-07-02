@@ -177,5 +177,42 @@
   mirror region between Snell window and waterline is still flatter than real footage.</div>
 </div>
 
+<div class="entry" id="q-pass-4">
+  <h2>Q-Pass 4 — 2026-07-02 — Q1: GPU FFT with three wavelength-banded cascades</h2>
+  <p><strong>What changed:</strong> The CPU-worker FFT is replaced by a GPU pipeline of fragment-shader ping-pong passes
+  (WebGL2-fallback compatible — no compute shaders): per-cascade spectrum evolution (h₀ from CPU JONSWAP, ω from k
+  in-shader), a 2D IFFT identical to fft.js (bit-reversal permutation + log2(N) butterfly stages, e^{+i2πk/len}
+  twiddles, two complex grids packed per RGBA texel → two chains per cascade), post passes packing λ·displacement /
+  height / Jacobian / normals, and the Q2 foam simulation moved to a GPU advect+inject pass driven by the Jacobians of
+  the two structural cascades. Three cascades partition the spectrum by wavelength — [preset tile (250–420 m), 59 m,
+  13 m] with feathered band edges — so a storm's 300 m peak waves and centimetre chop coexist with no tiling. A 64²
+  CPU worker mirror (cascade-0 band) still serves buoyancy queries. Verification en route (all committed as
+  <code>shots/q1-gpusim-verify.png</code>): a GPU-vs-CPU unit test of the full 2D IFFT (rms 3.8e-4 relative) and a
+  whole-pipeline comparison against the CPU reference at the same seed/time (rms 4.4e-4 of a 0.98 m-rms field). That
+  test suite root-caused two backend landmines: (1) every render-to-target is row-flipped relative to uv()/readback —
+  masked in single passes and by bit-reversal's complement identity, fatal in the vertical butterflies (fixed by
+  negating clip-space Y in all sim passes; the caustic map had the same latent flip); (2) uniform-derived smoothstep
+  edges read 0 in the vertex stage (cascade fades are literals now). Material: per-cascade displacement fades keyed to
+  each cascade's wavelength band (λ/5..λ/2.5 of band minimum vs grid spacing), per-cascade normal kills by pixel
+  footprint (now isotropic — the old max(fwidth) metric drew a radial fan of fade kinks from altitude), fine cascade
+  replaces the procedural detail-normal noise, grazing reflectance damps as normals flatten (the mid-distance mirror
+  wash), and the caustic grid gets its own full-weight slope assembly (the water's footprint kill was erasing the fine
+  chop that drives the web — the caustics now show centimetre webbing).</p>
+  <div class="shots">
+    <figure><img src="shots/q1-gpusim-verify.png" alt="GPU FFT verification" /><figcaption>shots/q1-gpusim-verify.png — GPU vs CPU verification HUD + raw cascade fields (disp0/norm0/disp2/foam)</figcaption></figure>
+    <figure><img src="shots/q1-altitude.png" alt="high altitude" /><figcaption>shots/q1-altitude.png — 260 m altitude, moderate: no tile repetition, wave detail to the horizon</figcaption></figure>
+    <figure><img src="shots/q1-near-vs-ref.png" alt="near surface vs reference" /><figcaption>shots/q1-near-vs-ref.png — 3 m camera (ours, left) vs ref_01: centimetre chop through metre swell</figcaption></figure>
+    <figure><img src="shots/q1-storm-vs-ref.png" alt="storm vs reference" /><figcaption>shots/q1-storm-vs-ref.png — storm preset (ours, left; cascade-0 rms 2.54 m ⇒ Hs ≈ 10 m measured by readback) vs ref_07</figcaption></figure>
+  </div>
+  <div class="honest"><strong>Honest assessment vs reference:</strong> The simulation core is now provably correct
+  (unit-tested against the CPU FFT) and the three scales read clearly in the near shot — that part stands next to
+  ref_01. Storm wave height is genuinely multi-meter (±7 m field, Hs ≈ 10 m). Still short of the reference: (1) ref_07's
+  storm sea is far rougher-textured with dense whitecap tracery to the horizon — ours keeps mats sparser and the
+  surface glassier (Q5's spray/atmosphere pass owns the rest of that gap); (2) wave crests lack the sharp peaked
+  profile of the reference's steep sea (our choppiness convergence is conservative); (3) from altitude a faint
+  concentric brightness gradient marks the cascade fade rings; (4) the caustics gained centimetre webbing from the fine
+  cascade, closing Q3's main stated gap.</div>
+</div>
+
 </body>
 </html>
