@@ -33,6 +33,24 @@ scaffold that installs this package as a dependency and renders the ocean with t
 above. If you install via a `file:` link, add `resolve: { dedupe: ['three'] }` to your
 Vite config so the library shares your app's three.js instance (two copies break TSL).
 
+## Explorable demo controls
+
+`npm run dev` opens the default demo scene with a free-fly camera and a preset
+dropdown (top-right). You can fly above and below the waterline — the underwater
+mode (fog, caustics, Snell window) engages automatically.
+
+| input           | action |
+|-----------------|--------|
+| drag (hold LMB) | look around |
+| `W`/`A`/`S`/`D` | fly forward / left / back / right |
+| `Q` / `E`       | descend / ascend |
+| `Shift`         | 3× speed boost |
+| mouse wheel     | adjust base speed |
+| preset dropdown | switch environment preset live (rebuilds spectra, resets foam) |
+
+Add `?controls=0` to the URL to disable both (the verification harness relies on
+input-free determinism, which is unaffected because the camera only moves on input).
+
 ## `createOcean(options)` — full options table
 
 | option        | type / values                                                        | default      | notes |

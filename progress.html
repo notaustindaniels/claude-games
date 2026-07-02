@@ -236,5 +236,26 @@
   stair-stepping from the 0.35-resolution reflector target.</div>
 </div>
 
+<div class="entry" id="q-pass-6">
+  <h2>Q-Pass 6 — 2026-07-02 — Q6: explorable demo (free-fly camera + preset dropdown)</h2>
+  <p><strong>What changed:</strong> The default app now has a free-fly camera (pointer-drag look, WASD fly, Q/E
+  descend/ascend, Shift boost, wheel speed) that crosses the waterline freely — underwater fog/caustics/Snell window
+  engage automatically — plus a live preset dropdown (top-right) that rebuilds the spectra without reloading. Controls
+  are input-driven only, so the input-free verification harness stays deterministic (<code>?controls=0</code> also
+  disables them). Controls are documented in README ("Explorable demo controls"). Evidence below is ONE continuous
+  session driven through the actual input pipeline (synthesized pointer/keyboard events) — the HUD frame counter is
+  monotonic across the shots (74 → 147 → 170 → 188), proving the same live session.</p>
+  <div class="shots">
+    <figure><img src="shots/q6-explore-strip.png" alt="one session, three angles" /><figcaption>shots/q6-explore-strip.png — same session: 131 m aerial / wave-level (1.5 m) / underwater (−4.5 m, UNDERWATER flag in HUD)</figcaption></figure>
+    <figure><img src="shots/q6-preset-switch.png" alt="live preset switch" /><figcaption>shots/q6-preset-switch.png — the same session after switching the dropdown to "sunset" (HUD preset=sunset, frame 188)</figcaption></figure>
+    <figure><img src="shots/q6-vs-ref.png" alt="underwater vs reference" /><figcaption>shots/q6-vs-ref.png — our underwater view (left) vs ref_09</figcaption></figure>
+  </div>
+  <div class="honest"><strong>Honest assessment vs reference:</strong> The explorable loop works end to end — fly
+  anywhere, cross the waterline, switch presets live. Vs the reference product's demo footage: (1) ref_09's underwater
+  scene has fish/kelp/scene dressing and volumetric shafts — ours has billboard shafts and a bare seabed; (2) our
+  waterline crossing has a wash overlay but no meniscus/droplet effect on the lens; (3) preset switching hitches for a
+  few hundred ms while spectra rebuild (the reference appears to crossfade).</div>
+</div>
+
 </body>
 </html>

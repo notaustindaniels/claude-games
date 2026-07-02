@@ -5,6 +5,7 @@ import * as THREE from 'three/webgpu';
 import { createOcean } from '../lib/index.js';
 import { makeSeabedTexture, makeSeabedMesh } from './seabed.js';
 import { makeLighthouse, makeCrate, makeBuoy, floatCrate, floatBuoy } from './props.js';
+import { attachFreeFly, attachPresetPicker } from './controls.js';
 
 function num(params, key, dflt) {
   const v = params.get(key);
@@ -91,6 +92,16 @@ export async function init({ renderer, params }) {
   const foamFreezeAt = params.has('foamfreeze') ? num(params, 'foamfreeze') : null;
   let foamFrozen = false;
 
+  // Explorable demo: free-fly camera + preset dropdown (?controls=0 to
+  // disable). Input-driven only, so headless determinism is unaffected.
+  let freeFly = null;
+  if (params.get('controls') !== '0') {
+    freeFly = attachFreeFly(camera, renderer.domElement);
+    attachPresetPicker(ocean, (name) => {
+      window.__OO.preset = name;
+    });
+  }
+
   const label = params.get('label');
 
   async function update(dt, simTime) {
@@ -98,6 +109,7 @@ export async function init({ renderer, params }) {
       ocean.sim.setFoam({ foamGain: 0 });
       foamFrozen = true;
     }
+    freeFly?.update(dt);
     await ocean.update(dt, simTime);
     if (props.crate) floatCrate(ocean, props.crate, simTime);
     if (props.buoy) floatBuoy(ocean, props.buoy);
@@ -105,6 +117,7 @@ export async function init({ renderer, params }) {
       simMs: +ocean.stats.simMs.toFixed(2),
       underwater: ocean.underwater,
       camSurfaceH: +ocean.cameraSurfaceHeight?.toFixed(3),
+      cam: [+camera.position.x.toFixed(1), +camera.position.y.toFixed(1), +camera.position.z.toFixed(1)],
       crateTiltDeg: props.crate
         ? +(props.crate.quaternion.angleTo(new THREE.Quaternion()) * 180 / Math.PI).toFixed(2)
         : null,
