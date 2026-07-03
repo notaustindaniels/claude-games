@@ -1,0 +1,24 @@
+OpenOcean v2 — gate table — pass-1 — 2026-07-03T14:05:05.907Z
+backend=webgl presets=blackflag,storm,seaofthieves sweepPreset=blackflag viewport=1280x720
+ENVIRONMENT LIMITATION: WebGPU unavailable in this container's Chromium (navigator.gpu undefined); confirmed for headless AND headed system Chrome + CfT builds. Gates run on webgl per VERIFY.md; the required single webgpu matrix capture is impossible here and is logged each pass.
+
+gate | scope         | value        | threshold        | verdict | note
+-----+---------------+--------------+------------------+---------+-----
+G1   | blackflag     | 0.0000       | >=0.25           | FAIL    | lapVar far=40.2 near=0.0 rows 364..482 vs 602..720
+G1   | storm         | 0.0000       | >=0.25           | FAIL    | lapVar far=44.5 near=0.0 rows 363..482 vs 601..720
+G1   | seaofthieves  | 0.0000       | >=0.25           | FAIL    | lapVar far=40.2 near=0.0 rows 364..482 vs 602..720
+G2   | M1            | 0.0900       | >=0.12           | FAIL    | pairs 0.135 0.000 0.135
+G2   | M4            | 0.0000       | >=0.12           | FAIL    | pairs 0.000 0.000 0.000
+G3   | blackflag     | 7373653.0000 | =0               | FAIL    | M1:508270px M2:508270px M3:478152px M4:825372px M5:887609px M6:479580px M7:921600px M8:921600px M9:921600px M10:921600px
+G3   | storm         | 7455693.0000 | =0               | FAIL    | M1:549290px M2:549290px M3:478152px M4:825372px M5:887609px M6:479580px M7:921600px M8:921600px M9:921600px M10:921600px
+G3   | seaofthieves  | 7373653.0000 | =0               | FAIL    | M1:508270px M2:508270px M3:478152px M4:825372px M5:887609px M6:479580px M7:921600px M8:921600px M9:921600px M10:921600px
+G4a  | storm         | no readback  | >2m              | FAIL    | getStats() null/absent
+G4b  | storm         | no readback  | <10deg           | FAIL    | getStats() null/absent
+G4c  | storm         | no readback  | >=4m             | FAIL    | getStats() null/absent
+G5   | blackflag     | no caustic info |                  | FAIL    | getCausticInfo() absent
+G6   | storm M1      | 0.7868       | <0.003           | FAIL    | declared=0.000% autoFlat=78.683% (rgb bucket 6,16,19) flatConsts=0
+G6   | storm M4      | 0.8910       | <0.003           | FAIL    | declared=0.000% autoFlat=89.097% (rgb bucket 63,0,63) flatConsts=0
+
+SUMMARY: 0/14 gate rows pass; consoleErrors=1; pageErrors=0
+console errors (first 5):
+  [blackflag] Failed to load resource: the server responded with a status of 404 (Not Found)

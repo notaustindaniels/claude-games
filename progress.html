@@ -9,4 +9,49 @@ Governing docs: <code>REBUILD.md</code> (what to build) and <code>VERIFY.md</cod
 fade-to-silk far field, billboard sun shafts, flat churn discs, 56&nbsp;m caustic box,
 near-identical presets — all now hunted by numeric gates G1–G6.</p>
 <!-- Agent: append one timestamped entry per pass below this line. -->
+
+<h2>2026-07-03 — Startup + pass 1 (harness proven against placeholder)</h2>
+<p><b>Startup sequence completed:</b> read REBUILD.md, VERIFY.md, the full
+webgpu-threejs-tsl skill (SKILL/REFERENCE, 7 docs, examples, templates), all 21
+reference stills, and the webgl-water-study (renderer.js causticsShader — the
+Wallace refracted-grid + dFdx area-ratio technique, to be reimplemented in TSL;
+water.js is the interactive pool sim, not directly relevant).
+<b>Reference→preset mapping:</b> blackflag = ref_04/05/06 (turquoise shallows,
+contact foam), ref_12 (readable seabed from above), ref_14/15 (ship + wake),
+ref_17/18/23/24/25 (island + waterline split + ship hero); storm = ref_07
+(ship, rain, grey-green sea, muted sky) and ref_26.png (the storm-foam lace
+close-up used for R4 side-by-sides); seaofthieves = stylized banded turquoise
+anchored by ref_12's painterly look, night/dusk variants ref_19/20/21;
+underwater/caustics = ref_09, ref_caustics.jpg.</p>
+<p><b>Environment findings (limitation logged per VERIFY.md):</b> WebGPU
+(<code>navigator.gpu</code>) is unavailable in every Chromium on this machine —
+headless AND headed, system Chrome 149 and CfT 148 (macOS 26 blocklist).
+verify.mjs re-probes every pass and records the limitation; the "one webgpu
+matrix" capture is currently impossible here. Gates therefore run on
+<code>webgl</code> (hardware ANGLE Metal on Apple M1; EXT_color_buffer_float +
+EXT_float_blend present, so float RTT pipelines are viable). three 0.181's
+WebGL backend implements TSL <code>compute()</code> via transform feedback —
+gather-only compute passes are the design target so one code path can serve
+both backends where possible.</p>
+<p><b>Pass 1 (placeholder proof):</b> verify.mjs implements the full contract —
+camera matrix M1–M10 hardcoded, × 3 presets; 24-frame / 25 s scripted spiral
+sweep sheet; gates G1–G6 computed numerically with uncomputable-counts-as-FAIL
+semantics; magenta clear color always on; console/pageerror collection;
+pass-numbered committed evidence. Against the placeholder the gate table is
+<b>0/14 PASS — the expected, correct start</b>
+(<code>shots/pass-1-gates.txt</code>, <code>pass-1-matrix.png</code>,
+<code>pass-1-sweep.png</code>).</p>
+<p><b>Pass 1 sweep review (blackflag, 24 frames):</b> frames t=0–5.4 show the
+placeholder disc floating in magenta void (world edge everywhere); t=12–19.6
+(underwater leg) is 100% magenta — no seabed, no underwater medium exists;
+t=21.7 re-emergence shows the disc edge-on then it leaves frame. All anomalies
+are the placeholder's intended inadequacy; no harness anomalies: labels,
+deterministic path, waterline crossing frame, and timing all behave. One
+console 404 (favicon) fixed by inlining a data-URI icon.</p>
+<p><b>Assumptions stated:</b> (1) app↔harness constants contract:
+seaLevel=0, seabedBaseY=−28, causticRadius=48, sun toward +X — verify.mjs
+asserts the app reports the same values; (2) M1 camera height is per-preset
+(3.5 m calm / 6.5 m storm) since "wave-level h+2 m" depends on sea state —
+hardcoded in verify.mjs; (3) the sweep runs on preset (passN−1)%3 rotating
+per pass so all presets get sweep coverage over the run of passes.</p>
 </body></html>
