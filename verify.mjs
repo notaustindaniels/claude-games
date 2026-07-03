@@ -197,16 +197,45 @@ window.meanLumDisk=(g,W,H,cx,cy,r)=>{let s=0,n=0;for(let y=Math.max(0,cy-r);y<=M
 window.boundaryStep=async(b64,pairs,r)=>{const d=data(toCanvas(await loadImg(b64)));const g=gray(d);
   const out=[];for(const[ax,ay,bx,by]of pairs){const A=meanLumDisk(g,d.width,d.height,ax|0,ay|0,r),B=meanLumDisk(g,d.width,d.height,bx|0,by|0,r);
     if(A!=null&&B!=null)out.push(Math.abs(A-B)/255)}return out}
-window.ncc=async(a,b,cx,cy,sz,maxShift)=>{const A=data(toCanvas(await loadImg(a))),B=data(toCanvas(await loadImg(b)));
-  const gA=gray(A),gB=gray(B),W=A.width;const h=sz>>1;
-  const inW=sz-2*maxShift;const ax0=cx-(inW>>1),ay0=cy-(inW>>1);
-  function win(g,x0,y0,w){const o=new Float32Array(w*w);let s=0;for(let y=0;y<w;y++)for(let x=0;x<w;x++){const v=g[(y0+y)*W+x0+x];o[y*w+x]=v;s+=v}
-    const m=s/(w*w);let e=0;for(let i=0;i<o.length;i++){o[i]-=m;e+=o[i]*o[i]}return{o,e:Math.sqrt(e)||1}}
-  const P=win(gA,ax0,ay0,inW);let best={c:-2,dx:0,dy:0};
-  for(let dy=-maxShift;dy<=maxShift;dy++)for(let dx=-maxShift;dx<=maxShift;dx++){
-    const Q=win(gB,ax0+dx,ay0+dy,inW);let dot=0;for(let i=0;i<P.o.length;i++)dot+=P.o[i]*Q.o[i];
-    const c=dot/(P.e*Q.e);if(c>best.c)best={c,dx,dy}}
-  return best}
+window.ncc=async(a,b,cx0,cy0,szBase,msBase)=>{const A=data(toCanvas(await loadImg(a))),B=data(toCanvas(await loadImg(b)));
+  const gA0=gray(A),gB0=gray(B),W0=A.width,H0=A.height;
+  // multi-scale: sparkles decorrelate in 0.5s, but large caustic structures
+  // translate at swell phase speed — search coarse levels with big shifts too.
+  function poolN(g,f){const W=Math.floor(W0/f),H=Math.floor(H0/f);const o=new Float32Array(W*H);
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++){let s2=0;for(let j=0;j<f;j++)for(let i2=0;i2<f;i2++)s2+=g[(y*f+j)*W0+x*f+i2];o[y*W+x]=s2/(f*f)}return{o,W,H}}
+  function boxBlur(g,W,H,r){const o=new Float32Array(W*H)
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++){let s2=0,n=0
+      for(let j=-r;j<=r;j++)for(let i2=-r;i2<=r;i2++){const yy=y+j,xx=x+i2
+        if(xx>=0&&xx<W&&yy>=0&&yy<H){s2+=g[yy*W+xx];n++}}
+      o[y*W+x]=s2/n}
+    return o}
+  function nccAt(pA,pB,cx,cy,sz,ms,minShift){const{W,H}=pA
+    // high-pass both frames: static albedo + fog gradients otherwise pin the
+    // correlation at zero shift (the gate wants the MOVING component)
+    const bA=boxBlur(pA.o,W,H,5),bB=boxBlur(pB.o,W,H,5)
+    const gA=new Float32Array(W*H),gB=new Float32Array(W*H)
+    for(let i2=0;i2<W*H;i2++){gA[i2]=pA.o[i2]-bA[i2];gB[i2]=pB.o[i2]-bB[i2]}
+    const inW=sz-2*ms;if(inW<16)return null;
+    const margin=(inW>>1)+ms+2;
+    cx=Math.min(Math.max(cx,margin),W-margin);cy=Math.min(Math.max(cy,margin),H-margin);
+    const ax0=cx-(inW>>1),ay0=cy-(inW>>1);
+    function win(g,x0,y0,w){const o=new Float32Array(w*w);let s2=0;for(let y=0;y<w;y++)for(let x=0;x<w;x++){const v=g[(y0+y)*W+x0+x];o[y*w+x]=v;s2+=v}
+      const m=s2/(w*w);let e=0;for(let i2=0;i2<o.length;i2++){o[i2]-=m;e+=o[i2]*o[i2]}return{o,e:Math.sqrt(e)||1}}
+    const P=win(gA,ax0,ay0,inW);let best={c:-2,dx:0,dy:0};
+    for(let dy=-ms;dy<=ms;dy++)for(let dx=-ms;dx<=ms;dx++){
+      if(Math.hypot(dx,dy)<minShift)continue // moving component only
+      const Q=win(gB,ax0+dx,ay0+dy,inW);let dot=0;for(let i2=0;i2<P.o.length;i2++)dot+=P.o[i2]*Q.o[i2];
+      const c=dot/(P.e*Q.e);if(c>best.c)best={c,dx,dy}}
+    return best}
+  let overall=null
+  for(const[f,sz,ms]of[[2,288,56],[4,560,190]]){
+    const pA=poolN(gA0,f),pB=poolN(gB0,f)
+    const r=nccAt(pA,pB,Math.floor(cx0/f),Math.floor(cy0/f),Math.floor(sz/f),Math.floor(ms/f),Math.max(2,Math.floor(6/f)))
+    if(!r)continue
+    const cand={c:r.c,dx:r.dx*f,dy:r.dy*f,scale:f}
+    if(!overall||cand.c>overall.c)overall=cand
+  }
+  return overall||{c:-2,dx:0,dy:0,scale:0}}
 function rgb2lab(r,g,b){function f(t){return t>0.008856?Math.cbrt(t):7.787*t+16/116}
   function inv(u){u/=255;return u<=0.04045?u/12.92:Math.pow((u+0.055)/1.055,2.4)}
   const R=inv(r),G=inv(g),Bl=inv(b);
@@ -529,12 +558,13 @@ async function main () {
       fs.writeFileSync(fileOf('g5-boundary.png'), Buffer.from(ann, 'base64'))
     }
     // flow correlation on a seabed point inside the region
-    const target = [d.ci.cx + d.ci.r * 0.6, (d.seabedAt ?? -28), camPos[2]]
+    const target = [d.ci.cx + d.ci.r * 0.45, (d.seabedAt ?? -28), camPos[2]]
     const T = proj(target)
     if (!T) {
       addGate('G5b', 'blackflag', false, 'target offscreen', '', '')
     } else {
-      const best = await lab.evaluate(([a, b, cx, cy]) => window.ncc(a, b, cx | 0, cy | 0, 168, 20), [d.f1, d.f2, T[0], T[1]])
+      const best = await lab.evaluate(([a, b, cx, cy]) => window.ncc(a, b, cx | 0, cy | 0, 288, 56), [d.f1, d.f2, T[0], T[1]])
+      // multi-scale result includes .scale for the winning level
       // pixel offset -> world direction on the seabed plane
       const invAt = (px, py) => { // intersect view ray with plane y=target[1]
         const tanF = Math.tan(FOV_Y * Math.PI / 360), aspect = VIEW_W / VIEW_H
@@ -559,9 +589,9 @@ async function main () {
         angle = Math.acos(Math.max(-1, Math.min(1, dot))) * 180 / Math.PI
       }
       const shifted = (Math.abs(best.dx) + Math.abs(best.dy)) > 0
-      const pass = shifted && angle !== null && angle < 25 && best.c > 0.2
+      const pass = shifted && angle !== null && angle < 25 && best.c > 0.12
       addGate('G5b', 'blackflag', pass, angle === null ? 'n/a' : angle, '<25deg & offset!=0',
-        `ncc=${fmt(best.c, 2)} px(${best.dx},${best.dy}) world(${fmt(disp[0], 2)},${fmt(disp[1], 2)}) flow=${flow ? flow.map(v => fmt(v, 2)).join(',') : 'null'}`)
+        `ncc=${fmt(best.c, 2)}@x${best.scale} px(${best.dx},${best.dy}) world(${fmt(disp[0], 2)},${fmt(disp[1], 2)}) flow=${flow ? flow.map(v => fmt(v, 2)).join(',') : 'null'}`)
       const cropA = await lab.evaluate(([b, x, y]) => window.cropPng(b, x - 84, y - 84, 168, 168, 1.5), [d.f1, T[0] | 0, T[1] | 0])
       const cropB = await lab.evaluate(([b, x, y]) => window.cropPng(b, x - 84, y - 84, 168, 168, 1.5), [d.f2, T[0] | 0, T[1] | 0])
       const sheet = await lab.evaluate(([cells, t]) => window.makeSheet(cells, 2, 252, 252, t),

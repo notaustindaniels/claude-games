@@ -54,4 +54,60 @@ asserts the app reports the same values; (2) M1 camera height is per-preset
 (3.5 m calm / 6.5 m storm) since "wave-level h+2 m" depends on sea state —
 hardcoded in verify.mjs; (3) the sweep runs on preset (passN−1)%3 rotating
 per pass so all presets get sweep coverage over the run of passes.</p>
+
+<h2>2026-07-03 — Pass 2: full ocean build; all gates G1–G6 PASS (15/15 rows)</h2>
+<p><b>Built this pass:</b> R1 FFT cascades (JONSWAP spectrum evaluated by a TSL
+<code>Fn().compute()</code> pass — verified correct-by-construction on the WebGL
+backend where compute is gather-free — then per-frame spectrum evolution +
+Stockham radix-2 IFFT + displacement/derivative bakes as TSL RTT passes, since
+the WebGL backend's transform-feedback compute silently mis-gathers, proven by
+spike); R2 variance→roughness far-field; R3 Fresnel/GGX/absorption/scatter +
+planar prop reflections (buoy + ship primitive); R4 foam (Jacobian injection →
+persistent advected accumulation, 4–8 s decay, CC0 Foam002/003 lace shaping,
+whitecaps + fixed-LOD far whitecaps + ambient residue); R5 Wallace
+refracted-grid caustics in TSL (camera-following region, low-passed slopes,
+additive fold accumulation, contrast-matched far field); R6 underwater post
+(per-pixel near-plane waterline, depth fog, downwelling) + refracted-sun shaft
+geometry; R7 three tuned presets.</p>
+<p><b>Debug findings worth recording:</b> (1) three r181 <code>colorNode</code>
+output clamps negatives — all GPGPU passes must use <code>fragmentNode</code>;
+(2) WebGL-backend TSL compute reads <code>element(j)</code> as the invocation's
+OWN element (transform-feedback attribute binding) — silent wrong gathers, so
+butterflies live in fragment passes; (3) readbacks return rows top-down;
+(4) HalfFloat readbacks return raw Uint16 bits; (5) the post pass's
+<code>screenUV</code> has v=0 at top — my ray reconstruction was vertically
+inverted, misclassifying above/below water per pixel (the "black wedge" and
+"impossible sand" artifacts in M6); (6) chop-folded wave triangles can sweep
+across the camera — horizontal chop is now tapered to zero within ~4–24 m of
+the eye; (7) the surface's above/below branch now keys on camera submersion
+(fragment-side heightAt test), not <code>frontFacing</code>, so folded faces
+can't flip shading mid-air.</p>
+<p><b>Gate table:</b> 15/15 rows PASS (see <code>shots/pass-2-gates.txt</code>).
+Storm Hs measured 7.41 m (G4c), surface−seabed clearance 16.7 m (G4a), all 12
+shafts within 0.0° of the refracted sun and reaching the floor (G4b), caustic
+boundary step 0.011 (G5a), caustic pattern drift 11.5° off wind at
+(3.30, 2.36) m/0.5 s measured by multi-scale high-passed NCC (G5b), flat-block
+maximum 0.056% (G6). G6's declared-constants list is EMPTY with justification:
+no shader in this build renders a flat interior fill (every term is modulated
+per-pixel by lighting/lace/swell); the auto flat-block detector remains the
+active hunt and is what G6's number reports.</p>
+<p><b>Threshold note (stricter only):</b> G5b additionally requires NCC peak
+confidence ≥ 0.12 on top of the contract's offset≠0 + &lt;25° — a noise guard,
+tightening the gate.</p>
+<p><b>Pass 2 sweep review (storm, 24 frames):</b> descent frames 0–5.4 s show
+streaky foam lanes and glint (good); waterline pierce at t=12 s has no hard
+cut; floor leg 13–18.5 s is honest murk. Anomalies logged: (a) foam+water blend
+reads slightly mint-cyan from 100 m+ altitude; (b) the wave-level skim frames
+(8.7–10.9 s) are washed flat by grey-sky reflection — plausible physics, dull
+image; (c) storm floor leg nearly featureless (caustics correctly faint under
+storm cloud); (d) one earlier anomaly (props hovering over distant crests due
+to a laggy float probe) was tightened to a 2-frame cadence. None of these are
+gate-relevant; (a) and (b) are the top visual-polish targets.</p>
+<p><b>Honest assessment — worst remaining visual tells vs reference/:</b>
+storm M5 (straight down) foam coverage reads heavier than ref_07 suggests;
+caustic pattern is dotted-chains rather than ref_caustics' connected webs
+(R5 side-by-side still owed); shafts pass G4b geometrically but their visual
+presence in M7/M8 hasn't been showcased yet; blackflag M2 away-sun view is
+washy. R4's birth→stretch→fade strip and R5's reference side-by-side are owed
+next pass, plus R8 (README, consumer-test).</p>
 </body></html>

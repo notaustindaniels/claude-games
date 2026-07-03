@@ -1,0 +1,19 @@
+OpenOcean v2 — gate table — dev — 2026-07-03T15:53:56.762Z
+backend=webgl presets=blackflag sweepPreset=storm viewport=1280x720
+ENVIRONMENT LIMITATION: WebGPU unavailable in this container's Chromium (navigator.gpu undefined); confirmed for headless AND headed system Chrome + CfT builds. Gates run on webgl per VERIFY.md; the required single webgpu matrix capture is impossible here and is logged each pass.
+STRUCTURAL FAILURES: sweep not captured (sweep preset storm not in run set)
+
+gate | scope         | value        | threshold        | verdict | note
+-----+---------------+--------------+------------------+---------+-----
+G1   | blackflag     | 4.5614       | >=0.25           | PASS    | lapVar far=1026.6 near=225.1 rows 364..482 vs 602..720
+G2   | all           | needs all presets | >=0.12           | FAIL    | partial run
+G3   | blackflag     | 0.0000       | =0               | PASS    | clean
+G4a  | storm         | no readback  | >2m              | FAIL    | getStats() null/absent
+G4b  | storm         | no readback  | <10deg           | FAIL    | getStats() null/absent
+G4c  | storm         | no readback  | >=4m             | FAIL    | getStats() null/absent
+G5a  | blackflag     | 0.0108       | <0.08            | PASS    | 25 boundary samples
+G5b  | blackflag     | 11.5320      | <25deg & offset!=0 | PASS    | ncc=0.19@x4 px(52,-56) world(3.30,2.36) flow=1.94,0.87
+G6   | storm M1      | no shot      | <0.3%            | FAIL    | 
+G6   | storm M4      | no shot      | <0.3%            | FAIL    | 
+
+SUMMARY: 4/10 gate rows pass; consoleErrors=0; pageErrors=0

@@ -1,0 +1,104 @@
+<!doctype html><html><body><script type="module">
+import * as THREE from 'three/webgpu'
+import { Fn, float, vec2, vec3, vec4, uv, uniform, texture, textureLoad, ivec2, positionLocal, instancedArray, instanceIndex, hash, uint } from 'three/tsl'
+
+const out = { steps: [] }
+window.__spike = out
+function step (name, v) { out.steps.push([name, v]); console.log('SPIKE', name, v) }
+
+try {
+  const renderer = new THREE.WebGPURenderer({ forceWebGL: true })
+  renderer.setSize(64, 64)
+  document.body.appendChild(renderer.domElement)
+  await renderer.init()
+  step('backend', renderer.backend.isWebGPUBackend ? 'webgpu' : 'webgl')
+
+  // E: uniform mutation between draws in same frame
+  try {
+    const u = uniform(0.0)
+    const mat = new THREE.MeshBasicNodeMaterial()
+    mat.colorNode = vec4(u, u.mul(2), 0, 1)
+    const quad = new THREE.QuadMesh(mat)
+    const rtA = new THREE.RenderTarget(4, 4, { type: THREE.FloatType, depthBuffer: false })
+    const rtB = new THREE.RenderTarget(4, 4, { type: THREE.FloatType, depthBuffer: false })
+    u.value = 0.25; renderer.setRenderTarget(rtA); quad.render(renderer)
+    u.value = 0.75; renderer.setRenderTarget(rtB); quad.render(renderer)
+    renderer.setRenderTarget(null)
+    const a = await renderer.readRenderTargetPixelsAsync(rtA, 1, 1, 1, 1)
+    const b = await renderer.readRenderTargetPixelsAsync(rtB, 1, 1, 1, 1)
+    step('E-uniform-mutation', `A=${a[0]} B=${b[0]} expect 0.25 / 0.75`)
+  } catch (e) { step('E-uniform-mutation', 'ERR ' + String(e.stack || e).slice(0, 200)) }
+
+  // F: RT mipmaps + .level sampling
+  try {
+    const rt = new THREE.RenderTarget(32, 32, { type: THREE.HalfFloatType, depthBuffer: false })
+    rt.texture.generateMipmaps = true
+    rt.texture.minFilter = THREE.LinearMipmapLinearFilter
+    const m = new THREE.MeshBasicNodeMaterial()
+    m.colorNode = Fn(() => vec4(uv().x.greaterThan(0.5).select(1, 0), 0.5, 0, 1))()
+    const q = new THREE.QuadMesh(m)
+    renderer.setRenderTarget(rt); q.render(renderer); renderer.setRenderTarget(null)
+    const rt2 = new THREE.RenderTarget(4, 4, { type: THREE.FloatType, depthBuffer: false })
+    const m2 = new THREE.MeshBasicNodeMaterial()
+    m2.colorNode = texture(rt.texture, uv()).level(5)
+    const q2 = new THREE.QuadMesh(m2)
+    renderer.setRenderTarget(rt2); q2.render(renderer); renderer.setRenderTarget(null)
+    const px = await renderer.readRenderTargetPixelsAsync(rt2, 2, 2, 1, 1)
+    step('F-rt-mips-level', `x=${px[0].toFixed(3)} expect ~0.5 if mip chain exists`)
+  } catch (e) { step('F-rt-mips-level', 'ERR ' + String(e.stack || e).slice(0, 200)) }
+
+  // G: RepeatWrapping sample of RT texture beyond [0,1]
+  try {
+    const rt = new THREE.RenderTarget(8, 8, { type: THREE.FloatType, depthBuffer: false })
+    rt.texture.wrapS = rt.texture.wrapT = THREE.RepeatWrapping
+    const m = new THREE.MeshBasicNodeMaterial()
+    m.colorNode = vec4(uv().x, uv().y, 0, 1)
+    const q = new THREE.QuadMesh(m)
+    renderer.setRenderTarget(rt); q.render(renderer); renderer.setRenderTarget(null)
+    const rt2 = new THREE.RenderTarget(4, 4, { type: THREE.FloatType, depthBuffer: false })
+    const m2 = new THREE.MeshBasicNodeMaterial()
+    m2.colorNode = texture(rt.texture, uv().mul(3.0))
+    const q2 = new THREE.QuadMesh(m2)
+    renderer.setRenderTarget(rt2); q2.render(renderer); renderer.setRenderTarget(null)
+    const px = await renderer.readRenderTargetPixelsAsync(rt2, 3, 3, 1, 1)
+    step('G-repeat-wrap', `x=${px[0].toFixed(3)} (should be inside 0..1, no clamp streak)`)
+  } catch (e) { step('G-repeat-wrap', 'ERR ' + String(e.stack || e).slice(0, 200)) }
+
+  // H: vertex-stage texture fetch driving displacement (visible via fragment probe)
+  try {
+    const dt = new THREE.DataTexture(new Float32Array([5, 0, 0, 1]), 1, 1, THREE.RGBAFormat, THREE.FloatType)
+    dt.needsUpdate = true
+    const scene = new THREE.Scene()
+    const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10)
+    cam.position.z = 5
+    const g = new THREE.PlaneGeometry(2, 2)
+    const m = new THREE.MeshBasicNodeMaterial()
+    // displacement in vertex stage (z += h*0 keeps geometry static but forces vertex fetch path)
+    m.positionNode = positionLocal.add(vec3(0, 0, texture(dt, vec2(0.5, 0.5)).level(0).x.mul(0)))
+    m.colorNode = Fn(() => vec4(texture(dt, vec2(0.5, 0.5)).level(0).x.mul(0.1), 0, 0, 1))()
+    scene.add(new THREE.Mesh(g, m))
+    const rt = new THREE.RenderTarget(8, 8, { type: THREE.FloatType })
+    renderer.setRenderTarget(rt); renderer.render(scene, cam); renderer.setRenderTarget(null)
+    const px = await renderer.readRenderTargetPixelsAsync(rt, 4, 4, 1, 1)
+    step('H-vertex-fetch', `r=${px[0].toFixed(3)} expect 0.5`)
+  } catch (e) { step('H-vertex-fetch', 'ERR ' + String(e.stack || e).slice(0, 200)) }
+
+  // I: compute + buffer readback with own-element semantics (H0 path)
+  try {
+    const N = 64
+    const buf = instancedArray(N, 'vec4')
+    const seed = uniform(7)
+    const k = Fn(() => {
+      const r1 = hash(instanceIndex.add(seed))
+      const r2 = hash(instanceIndex.add(seed).add(uint(9999)))
+      buf.element(instanceIndex).assign(vec4(r1, r2, float(instanceIndex), 1))
+    })().compute(N)
+    renderer.compute(k)
+    const ab = await renderer.getArrayBufferAsync(buf.value)
+    const f = new Float32Array(ab)
+    step('I-compute-h0-path', `ok idx5=[${f[20].toFixed(3)},${f[21].toFixed(3)},${f[22]}]`)
+  } catch (e) { step('I-compute-h0-path', 'ERR ' + String(e.stack || e).slice(0, 200)) }
+
+  out.done = true
+} catch (e) { out.fatal = String(e && e.stack || e); step('fatal', out.fatal.slice(0, 300)); out.done = true }
+</script></body></html>

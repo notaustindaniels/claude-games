@@ -1,0 +1,273 @@
+<!doctype html><html><body><script type="module">
+import * as THREE from 'three/webgpu'
+import { createFFT, FFT_N } from '/src/ocean/fft.js'
+import { Fn, vec2, vec4, uv, uniform, textureLoad, ivec2, float } from 'three/tsl'
+import { seabedHeightAt } from '/src/ocean/seabed.js'
+
+const out = { steps: [] }
+window.__spike = out
+const step = (n, v) => { out.steps.push([n, v]); console.log('FFTCHECK', n, v) }
+const rd = (r, rt, x, y, w = 1, h = 1) => r.readRenderTargetPixelsAsync(rt, x, y, w, h)
+
+try {
+  const renderer = new THREE.WebGPURenderer({ forceWebGL: true })
+  renderer.setSize(64, 64)
+  document.body.appendChild(renderer.domElement)
+  await renderer.init()
+
+  // ---- A: negatives / out-of-range through MeshBasicNodeMaterial -> float RT
+  {
+    const rt = new THREE.RenderTarget(4, 4, { type: THREE.FloatType, depthBuffer: false })
+    const m = new THREE.MeshBasicNodeMaterial()
+    m.colorNode = vec4(-3.25, 2.5, 0.5, 1)
+    const q = new THREE.QuadMesh(m)
+    renderer.setRenderTarget(rt); q.render(renderer); renderer.setRenderTarget(null)
+    const px = await rd(renderer, rt, 1, 1)
+    step('A-neg-through-rtt', `[${px[0]},${px[1]},${px[2]}] expect [-3.25,2.5,0.5]`)
+    const m2 = new THREE.MeshBasicNodeMaterial()
+    m2.fragmentNode = vec4(-3.25, 2.5, 0.5, 1)
+    const q2 = new THREE.QuadMesh(m2)
+    renderer.setRenderTarget(rt); q2.render(renderer); renderer.setRenderTarget(null)
+    const px2 = await rd(renderer, rt, 1, 1)
+    step('A2-neg-fragmentNode', `[${px2[0]},${px2[1]},${px2[2]}] expect [-3.25,2.5,0.5]`)
+  }
+
+  // ---- B: RT->RT textureLoad addressing contract
+  {
+    const rtA = new THREE.RenderTarget(16, 16, { type: THREE.FloatType, depthBuffer: false })
+    const rtB = new THREE.RenderTarget(16, 16, { type: THREE.FloatType, depthBuffer: false })
+    const mA = new THREE.MeshBasicNodeMaterial()
+    mA.colorNode = Fn(() => {
+      const g = vec2(uv().x.mul(16), uv().y.mul(16)).floor()
+      return vec4(g.x.add(g.y.mul(1000)), g.x, g.y, 1)
+    })()
+    const qA = new THREE.QuadMesh(mA)
+    renderer.setRenderTarget(rtA); qA.render(renderer)
+    const mB = new THREE.MeshBasicNodeMaterial()
+    mB.colorNode = Fn(() => {
+      const v = textureLoad(rtA.texture, ivec2(5, 7))
+      return vec4(v.x, v.y, v.z, 1)
+    })()
+    const qB = new THREE.QuadMesh(mB)
+    renderer.setRenderTarget(rtB); qB.render(renderer); renderer.setRenderTarget(null)
+    const px = await rd(renderer, rtB, 2, 2)
+    step('B-rt-textureLoad', `[${px[0]},${px[1]},${px[2]}] expect [7005,5,7]`)
+  }
+
+  const fft = createFFT(renderer)
+  const h0 = fft.__debugH0()
+  h0.image.data.fill(0)
+  const A = 0.5
+  const set = (mx, mz, re, im, reM, imM) => {
+    const o = (mz * FFT_N + mx) * 4
+    h0.image.data[o] = re; h0.image.data[o + 1] = im
+    h0.image.data[o + 2] = reM; h0.image.data[o + 3] = imM
+  }
+  set(2, 0, A, 0, A, 0)
+  set(254, 0, A, 0, A, 0)
+  h0.needsUpdate = true
+
+  // ---- C: evolve output at key texels
+  {
+    const atlas = fft.__debugPartial(0, 0)
+    const FLIP = 768 - 1 // readback rows are top-down
+    const p1 = await rd(renderer, atlas, 2, FLIP)
+    const p2 = await rd(renderer, atlas, 254, FLIP)
+    const p3 = await rd(renderer, atlas, 3, FLIP)
+    step('C-evolve', `t(2,0)=[${p1[0]},${p1[1]}] expect [0,0] | t(254,0)=[${p2[0]},${p2[1]}] expect [2,0] | t(3,0)=[${p3[0]},${p3[1]}] expect [0,0]`)
+  }
+
+  // ---- D: one horizontal stage — JS-checkable
+  // After stage0: out[i] = in[rev pair]; for row0, in = C1: nonzero only at x=2 (0) and x=254 (2)
+  // out[i].xy = in[a].xy + w*in[b].xy with (a,b)=stage0 pairs.
+  {
+    const atlas = fft.__debugPartial(0, 1)
+    const FLIP = 768 - 1
+    // find which outputs should be nonzero: pairs containing 254: rev(i)=254 -> i = rev8(254)=127? compute in JS:
+    const rev = (x) => { let r = 0; for (let b = 0; b < 8; b++) r = (r << 1) | ((x >> b) & 1); return r }
+    let hits = []
+    for (let i = 0; i < 256; i++) {
+      const span = 1, top = (i % 2) === 0
+      const a = rev(top ? i : i - 1), b = rev(top ? i + 1 : i)
+      const k = (i * 128) % 256
+      const wr = Math.cos(2 * Math.PI * k / 256), wi = Math.sin(2 * Math.PI * k / 256)
+      // in[x] = (x==254? [2,0] : [0,0])
+      const inA = a === 254 ? [2, 0] : [0, 0]
+      const inB = b === 254 ? [2, 0] : [0, 0]
+      const or = inA[0] + wr * inB[0] - wi * inB[1]
+      const oi = inA[1] + wr * inB[1] + wi * inB[0]
+      if (Math.abs(or) > 1e-6 || Math.abs(oi) > 1e-6) hits.push([i, or, oi])
+    }
+    const px = await rd(renderer, atlas, 0, FLIP, 256, 1)
+    let match = true; const got = []
+    for (const [i, er, ei] of hits) {
+      const gr = px[i * 4], gi = px[i * 4 + 1]
+      got.push(`${i}:[${gr.toFixed(2)},${gi.toFixed(2)}]exp[${er.toFixed(2)},${ei.toFixed(2)}]`)
+      if (Math.abs(gr - er) > 0.01 || Math.abs(gi - ei) > 0.01) match = false
+    }
+    // also count unexpected nonzeros
+    let stray = 0
+    for (let i = 0; i < 256; i++) {
+      if (!hits.find(h => h[0] === i) && (Math.abs(px[i * 4]) > 1e-4 || Math.abs(px[i * 4 + 1]) > 1e-4)) stray++
+    }
+    step('D-stage0', `match=${match} stray=${stray} ${got.slice(0, 4).join(' ')}`)
+  }
+
+
+  // ---- D2: stage-by-stage bisection vs JS mirror (row 0 of cascade 0, specA=C1)
+  {
+    const FLIP = 768 - 1
+    const rev = (x) => { let r = 0; for (let b = 0; b < 8; b++) r = (r << 1) | ((x >> b) & 1); return r }
+    // JS mirror of the butterfly chain on row 0 (horizontal stages only)
+    let cur = new Array(256).fill(0).map(() => [0, 0])
+    cur[254] = [2, 0]
+    const mirrors = []
+    for (let st = 0; st < 8; st++) {
+      const nxt = new Array(256)
+      const span = 1 << st
+      for (let i = 0; i < 256; i++) {
+        const k = (i * (256 >> (st + 1))) % 256
+        const wr = Math.cos(2 * Math.PI * k / 256), wi = Math.sin(2 * Math.PI * k / 256)
+        const top = (i % (span * 2)) < span
+        let a, b
+        if (st === 0) { a = rev(top ? i : i - 1); b = rev(top ? i + 1 : i) } else { a = top ? i : i - span; b = top ? i + span : i }
+        nxt[i] = [cur[a][0] + wr * cur[b][0] - wi * cur[b][1], cur[a][1] + wr * cur[b][1] + wi * cur[b][0]]
+      }
+      cur = nxt
+      mirrors.push(cur.map(v => v.slice()))
+    }
+    for (let n = 1; n <= 8; n++) {
+      const atlas = fft.__debugPartial(0, n)
+      const px = await rd(renderer, atlas, 0, FLIP, 256, 1)
+      let worst = 0, wi = -1
+      for (let i = 0; i < 256; i++) {
+        const e = mirrors[n - 1][i]
+        const d = Math.max(Math.abs(px[i * 4] - e[0]), Math.abs(px[i * 4 + 1] - e[1]))
+        if (d > worst) { worst = d; wi = i }
+      }
+      step('D2-stage' + n, `worst=${worst.toFixed(4)} at i=${wi} got[${px[wi * 4].toFixed(2)},${px[wi * 4 + 1].toFixed(2)}] exp[${mirrors[n - 1][wi][0].toFixed(2)},${mirrors[n - 1][wi][1].toFixed(2)}]`)
+      if (worst > 0.01 && n < 8) break
+    }
+  }
+
+  // ---- D3: V stages — after 8H+nV, column 0 should fill rows 0..2^n-1 with (2,0)
+  {
+    for (let n = 0; n <= 8; n++) {
+      const atlas = fft.__debugPartial(0, 8 + n)
+      const rows = [0, 1, 2, 3, 128, 255]
+      const got = []
+      for (const r of rows) {
+        const px = await rd(renderer, atlas, 0, 767 - r) // texture row r (readback flip)
+        got.push(`r${r}=[${px[0].toFixed(1)},${px[1].toFixed(1)}]`)
+      }
+      step('D3-V' + n, got.join(' '))
+      if (n >= 3 && n < 8) continue
+    }
+  }
+  // ---- E: full chain single mode
+  {
+    fft.update(0)
+    const rt = fft.__debugDispRT(0)
+    const raw = await rd(renderer, rt, 0, FFT_N - 1, FFT_N, 1)
+    const half = (u) => { const s2 = (u & 0x8000) ? -1 : 1, e = (u >> 10) & 0x1f, m = u & 0x3ff
+      if (e === 0) return s2 * m * Math.pow(2, -24); if (e === 31) return m ? NaN : s2 * Infinity
+      return s2 * (1 + m / 1024) * Math.pow(2, e - 15) }
+    const px = raw instanceof Uint16Array ? Array.from(raw, half) : raw
+    let worst = 0
+    for (let mx = 0; mx < FFT_N; mx++) {
+      const h = px[mx * 4 + 1]
+      const e = 2 * 2 * A * Math.cos(2 * Math.PI * 2 * mx / FFT_N)
+      worst = Math.max(worst, Math.abs(h - e))
+    }
+    step('E-full-ifft', `worst |err|=${worst.toFixed(4)} (pass if < 0.03) h0=${px[1].toFixed(3)} h64=${px[64 * 4 + 1].toFixed(3)} type=${raw.constructor.name}`)
+  }
+
+  // ---- F: seabed through RTT (was 0 — retest after A explains)
+  {
+    const rt2 = new THREE.RenderTarget(4, 4, { type: THREE.FloatType, depthBuffer: false })
+    const m = new THREE.MeshBasicNodeMaterial()
+    m.fragmentNode = Fn(() => vec4(seabedHeightAt(uv().mul(100)), 0, 0, 1))()
+    const q = new THREE.QuadMesh(m)
+    renderer.setRenderTarget(rt2); q.render(renderer); renderer.setRenderTarget(null)
+    const sb = await rd(renderer, rt2, 0, 0, 2, 1)
+    step('F-seabed', `y=${sb[0].toFixed(2)} expect ~-28`)
+  }
+
+
+  // ---- G: real H0 compute path (JONSWAP via TSL compute + readback)
+  {
+    const { PRESETS } = await import('/src/ocean/presets.js')
+    await fft.setPreset(PRESETS.blackflag)
+    const h0d = fft.__debugH0().image.data
+    let nz = 0, mx = 0, nan = 0
+    for (let i = 0; i < h0d.length; i += 4) {
+      const v = Math.hypot(h0d[i], h0d[i + 1])
+      if (v > 1e-9) nz++
+      if (v > mx) mx = v
+      if (!isFinite(h0d[i])) nan++
+    }
+    step('G-h0-compute', `nonzero=${nz}/${h0d.length / 4} max=${mx.toExponential(2)} nan=${nan}`)
+    fft.update(3.0)
+    const raw = await rd(renderer, fft.__debugDispRT(0), 0, 0, FFT_N, FFT_N)
+    const half = (u) => { const s2 = (u & 0x8000) ? -1 : 1, e = (u >> 10) & 0x1f, m = u & 0x3ff
+      if (e === 0) return s2 * m * Math.pow(2, -24); if (e === 31) return m ? NaN : s2 * Infinity
+      return s2 * (1 + m / 1024) * Math.pow(2, e - 15) }
+    let hmin = 1e9, hmax = -1e9, hsum = 0, hsum2 = 0
+    for (let i = 0; i < FFT_N * FFT_N; i++) {
+      const h = half(raw[i * 4 + 1])
+      hmin = Math.min(hmin, h); hmax = Math.max(hmax, h); hsum += h; hsum2 += h * h
+    }
+    const n = FFT_N * FFT_N, mean = hsum / n, std = Math.sqrt(Math.max(hsum2 / n - mean * mean, 0))
+    step('G-cascade0-heights', `min=${hmin.toFixed(3)} max=${hmax.toFixed(3)} std=${std.toFixed(3)} Hs~=${(4 * std).toFixed(2)}m (cascade0 only)`)
+  }
+
+  // ---- H: slope stats per cascade from derivRT vs CPU spectral prediction
+  {
+    const { cascadeStats } = await import('/src/ocean/fft.js')
+    const { PRESETS } = await import('/src/ocean/presets.js')
+    const cs = cascadeStats(PRESETS.blackflag)
+    const half = (u) => { const s2 = (u & 0x8000) ? -1 : 1, e = (u >> 10) & 0x1f, m = u & 0x3ff
+      if (e === 0) return s2 * m * Math.pow(2, -24); if (e === 31) return m ? NaN : s2 * Infinity
+      return s2 * (1 + m / 1024) * Math.pow(2, e - 15) }
+    for (let c = 0; c < 3; c++) {
+      const raw = await rd(renderer, fft.__debugDerivRT(c), 0, 0, FFT_N, FFT_N)
+      let sx2 = 0, sz2 = 0, n = FFT_N * FFT_N
+      for (let i = 0; i < n; i++) {
+        const gx = half(raw[i * 4]), gz = half(raw[i * 4 + 1])
+        sx2 += gx * gx; sz2 += gz * gz
+      }
+      step('H-slopes-c' + c, `measured slopeVar=${(sx2 / n + sz2 / n).toExponential(3)} spectral=${cs[c].slopeVar.toExponential(3)} m0=${cs[c].m0.toExponential(3)}`)
+    }
+  }
+
+  // ---- I: derivative sign check — single mode, dh/dx must be -2A*k*sin(kx)
+  {
+    h0.image.data.fill(0)
+    const A2 = 0.5
+    const o1 = (0 * FFT_N + 2) * 4; h0.image.data[o1] = A2; h0.image.data[o1 + 2] = A2
+    const o2 = (0 * FFT_N + 254) * 4; h0.image.data[o2] = A2; h0.image.data[o2 + 2] = A2
+    h0.needsUpdate = true
+    fft.update(0)
+    const raw = await rd(renderer, fft.__debugDerivRT(0), 0, FFT_N - 1, FFT_N, 1)
+    const half = (u) => { const s2 = (u & 0x8000) ? -1 : 1, e = (u >> 10) & 0x1f, m = u & 0x3ff
+      if (e === 0) return s2 * m * Math.pow(2, -24); if (e === 31) return m ? NaN : s2 * Infinity
+      return s2 * (1 + m / 1024) * Math.pow(2, e - 15) }
+    // h(x) = 2*2A cos(2π·2·mx/N) => dh/dx = -2*2A*(2π·2/L)*sin(2π·2·mx/N)
+    const L = 250, kw = 2 * Math.PI * 2 / L
+    let worst = 0, sgnOK = 0, sgnBad = 0
+    for (let mx = 0; mx < FFT_N; mx++) {
+      const got = half(raw[mx * 4])          // derivTex.x = dh/dx
+      const exp2 = -2 * 2 * A2 * kw * Math.sin(2 * Math.PI * 2 * mx / FFT_N)
+      worst = Math.max(worst, Math.abs(got - exp2))
+      if (Math.abs(exp2) > 0.01) { (Math.sign(got) === Math.sign(exp2) ? sgnOK++ : sgnBad++) }
+    }
+    step('I-dhdx-sign', `worst=${worst.toFixed(4)} signOK=${sgnOK} signBad=${sgnBad}`)
+    // dx (horizontal displacement) sign: dx(x) = -(kx/k)*hilbert => for +k mode: dx = 2*2A? check phase
+    const raw2 = await rd(renderer, fft.__debugDispRT(0), 0, FFT_N - 1, FFT_N, 1)
+    let s0 = '', s64 = ''
+    s0 = half(raw2[0]).toFixed(3); s64 = half(raw2[64 * 4]).toFixed(3)
+    step('I-dx-phase', `dx(0)=${s0} dx(64)=${s64} h(0)=${half(raw2[1]).toFixed(3)} (dx should be 90deg out of phase with h)`)
+  }
+  out.done = true
+} catch (e) { out.fatal = String(e && e.stack || e); step('fatal', out.fatal.slice(0, 500)); out.done = true }
+</script></body></html>
