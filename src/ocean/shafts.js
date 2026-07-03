@@ -5,8 +5,8 @@
 // so shafts flicker with the waves. No billboards.
 import * as THREE from 'three/webgpu'
 import {
-  Fn, float, vec2, vec3, vec4, uniform, positionGeometry, positionWorld,
-  normalize, smoothstep, max, min, clamp, length, cameraPosition,
+  Fn, float, vec2, vec3, vec4, uniform, positionWorld, modelWorldMatrix,
+  normalize, smoothstep, max, min, clamp, length, cameraPosition, cross, dot, abs,
 } from 'three/tsl'
 import { SEABED_BASE_Y } from './presets.js'
 
@@ -34,14 +34,27 @@ export function createShafts (scene, caustics, sky) {
     depthWrite: false, side: THREE.DoubleSide,
   })
   mat.colorNode = Fn(() => {
-    // radial falloff from the cylinder axis (local xz of unit cylinder)
-    const rad = length(positionGeometry.xz)
-    const radial = smoothstep(1.0, 0.15, rad)
+    // volumetric-style core glow: distance between the camera ray through
+    // this fragment and the shaft's axis line (all from modelWorldMatrix,
+    // so the one material serves every shaft)
+    const axisP = modelWorldMatrix.mul(vec4(0, 0, 0, 1)).xyz
+    const axisD = normalize(modelWorldMatrix.mul(vec4(0, 1, 0, 0)).xyz)
+    const radius = length(modelWorldMatrix.mul(vec4(1, 0, 0, 0)).xyz)
+    const v = normalize(positionWorld.sub(cameraPosition))
+    const nn = normalize(cross(v, axisD))
+    const lineDist = abs(dot(cameraPosition.sub(axisP), nn))
+    const radial = smoothstep(radius, radius.mul(0.12), lineDist)
     // vertical falloff: fade in below the surface, fade toward the floor
     const y = positionWorld.y
     const vert = smoothstep(0.5, -3.5, y).mul(smoothstep(BOTTOM_Y, BOTTOM_Y + 14, y))
-    // caustic flicker at the entry point
-    const flick = caustics.lightAt(positionWorld.xz, float(1)).sub(0.55).mul(0.8).clamp(0.1, 1.6)
+      .mul(smoothstep(-30, -3, y).mul(0.62).add(0.38)) // brightest just below the surface
+    // caustic flicker anchored at the shaft's surface ENTRY point (constant
+    // along the beam) with a weak per-fragment streak component
+    const tUp = float(0).sub(axisP.y).div(axisD.y)
+    const entryXZ = axisP.add(axisD.mul(tUp)).xz
+    const flickEntry = caustics.lightAt(entryXZ, float(1)).sub(0.45).mul(0.9).clamp(0.12, 1.7)
+    const flickFrag = caustics.lightAt(positionWorld.xz, float(1)).sub(0.45).mul(0.9).clamp(0.12, 1.7)
+    const flick = flickEntry.mul(0.72).add(flickFrag.mul(0.28)).clamp(0.4, 1.7)
     // only meaningful when the camera is submerged
     const camFade = smoothstep(0.5, -2.5, U.camY)
     const a = radial.mul(vert).mul(flick).mul(U.intensity).mul(camFade)
@@ -89,14 +102,14 @@ export function createShafts (scene, caustics, sky) {
       // spans surface -> floor along the refracted axis
       m.position.set(px + axis.x * (midY - TOP_Y) / axis.y, midY, pz + axis.z * (midY - TOP_Y) / axis.y)
       m.quaternion.copy(q)
-      const r = 1.6 + ((px * 7 + pz * 13) % 5 + 5) % 5 * 0.5
+      const r = 2.1 + ((px * 7 + pz * 13) % 5 + 5) % 5 * 0.55
       m.scale.set(r, len / (Math.abs(axis.y) + 1e-3), r)
       m.userData.entry = [px, pz]
     }
   }
 
   function applyPreset (p) {
-    U.intensity.value = p.wind > 15 ? 0.16 : (p.painterly > 0.5 ? 0.5 : 0.4)
+    U.intensity.value = p.wind > 15 ? 0.3 : (p.painterly > 0.5 ? 1.2 : 1.05)
     U.sunTint.value.setRGB(...p.sunColor).multiplyScalar(Math.min(p.sunIntensity, 1.3))
   }
 

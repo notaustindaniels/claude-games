@@ -70,8 +70,9 @@ window.__oo = {
     }
   },
   getSeabedAt: null,         // replaced below (async probe)
-  async getFlowAt (x, z) { return ocean ? ocean.foam.flowAt() : null },
+  async getFlowAt (x, z) { return ocean ? ocean.fft.realizedFlow() : null },
   getCausticInfo: () => ocean ? ocean.caustics.info() : null,
+  getSwellPeriod: () => ocean ? ocean.swellPeriod() : null,
 }
 
 async function init () {
@@ -115,6 +116,7 @@ async function init () {
     window.__oo.ready = true
   } else {
     setupControls()
+    setupUI()
     let last = performance.now()
     renderer.setAnimationLoop(() => {
       const now = performance.now()
@@ -123,9 +125,38 @@ async function init () {
       ocean.update(dt)
       ocean.render()
       hud.textContent = `OpenOcean v2 | ${ocean.preset} | t=${ocean.time.toFixed(1)}s | backend=${window.__oo.backend()}` +
-        '\ndrag look · WASD move · scroll dolly · 1/2/3 presets'
+        '\ndrag look · WASD move (shift fast) · scroll dolly'
     })
   }
+}
+
+// preset / quality / backend UI (R8)
+function setupUI () {
+  const bar = document.createElement('div')
+  bar.style.cssText = 'position:fixed;top:10px;right:10px;display:flex;gap:6px;' +
+    'font:12px ui-monospace,monospace;color:#cfe;background:rgba(0,20,30,.6);padding:6px 8px;border-radius:6px'
+  const mkSel = (label, opts, cur, onch) => {
+    const w = document.createElement('label')
+    w.textContent = label + ' '
+    const sel = document.createElement('select')
+    for (const o of opts) {
+      const el = document.createElement('option')
+      el.value = o; el.textContent = o; if (o === cur) el.selected = true
+      sel.appendChild(el)
+    }
+    sel.onchange = () => onch(sel.value)
+    w.appendChild(sel)
+    return w
+  }
+  bar.appendChild(mkSel('preset', PRESET_NAMES, PRESET, v => ocean.setPreset(v)))
+  bar.appendChild(mkSel('quality', ['full', 'balanced', 'performance'], 'full', v => {
+    renderer.setPixelRatio(v === 'full' ? 1 : v === 'balanced' ? 0.75 : 0.5)
+    renderer.setSize(innerWidth, innerHeight)
+  }))
+  bar.appendChild(mkSel('backend', ['webgl', 'webgpu'], window.__oo.backend(), v => {
+    const u = new URL(location.href); u.searchParams.set('backend', v); location.href = u
+  }))
+  document.body.appendChild(bar)
 }
 
 // free-fly camera (drag look + WASD + scroll dolly), above and below water

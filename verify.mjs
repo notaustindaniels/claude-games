@@ -158,10 +158,14 @@ async function launchBrowser () {
   throw new Error('no launchable chromium found (never downloading per VERIFY.md):\n' + errs.join('\n'))
 }
 
-function serve (dir) {
+function serve (mounts) {
   const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.jpg': 'image/jpeg', '.json': 'application/json', '.wasm': 'application/wasm' }
   const srv = http.createServer((req, res) => {
     let p = decodeURIComponent(new URL(req.url, 'http://x').pathname)
+    let dir = mounts['/']
+    for (const [prefix, d] of Object.entries(mounts)) {
+      if (prefix !== '/' && p.startsWith(prefix)) { dir = d; p = p.slice(prefix.length) || '/'; break }
+    }
     if (p.endsWith('/')) p += 'index.html'
     const file = path.join(dir, p)
     if (!file.startsWith(dir) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
@@ -197,6 +201,49 @@ window.meanLumDisk=(g,W,H,cx,cy,r)=>{let s=0,n=0;for(let y=Math.max(0,cy-r);y<=M
 window.boundaryStep=async(b64,pairs,r)=>{const d=data(toCanvas(await loadImg(b64)));const g=gray(d);
   const out=[];for(const[ax,ay,bx,by]of pairs){const A=meanLumDisk(g,d.width,d.height,ax|0,ay|0,r),B=meanLumDisk(g,d.width,d.height,bx|0,by|0,r);
     if(A!=null&&B!=null)out.push(Math.abs(A-B)/255)}return out}
+window.diffViz=async(a,b,scale)=>{const A=data(toCanvas(await loadImg(a))),B=data(toCanvas(await loadImg(b)));
+  const c2=document.createElement('canvas');c2.width=A.width;c2.height=A.height;
+  const g2=c2.getContext('2d');const o=g2.createImageData(A.width,A.height);
+  for(let i=0;i<A.data.length;i+=4){const d=Math.abs((0.299*B.data[i]+0.587*B.data[i+1]+0.114*B.data[i+2])-(0.299*A.data[i]+0.587*A.data[i+1]+0.114*A.data[i+2]))*scale;
+    o.data[i]=o.data[i+1]=o.data[i+2]=Math.min(d,255);o.data[i+3]=255}
+  g2.putImageData(o,0,0);return c2.toDataURL('image/png').split(',')[1]}
+window.nccDiff=async(a,b,c,cx0,cy0)=>{
+  // static-canceling registration: NCC of |f2-f1| vs |f3-f2| — the moving
+  // pattern's change-field translates by exactly the 0.5 s displacement,
+  // while static content (seabed albedo) vanishes from both operands.
+  const A=data(toCanvas(await loadImg(a))),B=data(toCanvas(await loadImg(b))),C=data(toCanvas(await loadImg(c)));
+  const gA0=gray(A),gB0=gray(B),gC0=gray(C),W0=A.width,H0=A.height;
+  const d1=new Float32Array(W0*H0),d2=new Float32Array(W0*H0);
+  for(let i=0;i<W0*H0;i++){d1[i]=gB0[i]-gA0[i];d2[i]=gC0[i]-gB0[i]}
+  return window.__nccCore(d1,d2,W0,H0,cx0,cy0)}
+window.__nccCore=(gA0,gB0,W0,H0,cx0,cy0)=>{
+  function poolN(g,f){const W=Math.floor(W0/f),H=Math.floor(H0/f);const o=new Float32Array(W*H);
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++){let s2=0;for(let j=0;j<f;j++)for(let i2=0;i2<f;i2++)s2+=g[(y*f+j)*W0+x*f+i2];o[y*W+x]=s2/(f*f)}return{o,W,H}}
+  function nccAt(pA,pB,cx,cy,sz,ms,minShift){const{W,H}=pA
+    const gA=pA.o,gB=pB.o
+    const inW=sz-2*ms;if(inW<16)return null;
+    const margin=(inW>>1)+ms+2;
+    cx=Math.min(Math.max(cx,margin),W-margin);cy=Math.min(Math.max(cy,margin),H-margin);
+    const ax0=cx-(inW>>1),ay0=cy-(inW>>1);
+    function win(g,x0,y0,w){const o=new Float32Array(w*w);let s2=0;for(let y=0;y<w;y++)for(let x=0;x<w;x++){const v=g[(y0+y)*W+x0+x];o[y*w+x]=v;s2+=v}
+      const m=s2/(w*w);let e=0;for(let i2=0;i2<o.length;i2++){o[i2]-=m;e+=o[i2]*o[i2]}return{o,e:Math.sqrt(e)||1}}
+    const P=win(gA,ax0,ay0,inW);let best={c:-2,dx:0,dy:0};
+    for(let dy=-ms;dy<=ms;dy++)for(let dx=-ms;dx<=ms;dx++){
+      if(Math.hypot(dx,dy)<minShift)continue
+      const Q=win(gB,ax0+dx,ay0+dy,inW);let dot=0;for(let i2=0;i2<P.o.length;i2++)dot+=P.o[i2]*Q.o[i2];
+      const c=dot/(P.e*Q.e);if(c>best.c)best={c,dx,dy}}
+    best.ucx=cx;best.ucy=cy
+    return best}
+  let overall=null
+  for(const[f,sz,ms]of[[2,320,40],[4,480,170]]){
+    const pA=poolN(gA0,f),pB=poolN(gB0,f)
+    const r=nccAt(pA,pB,Math.floor(cx0/f),Math.floor(cy0/f),Math.floor(sz/f),Math.floor(ms/f),Math.max(1,Math.floor(4/f)))
+    if(!r)continue
+    const cand={c:r.c,dx:r.dx*f,dy:r.dy*f,scale:f,ucx:r.ucx*f,ucy:r.ucy*f}
+    if(cand.c>=0.25){overall=cand;break}
+    if(!overall||cand.c>overall.c)overall=cand
+  }
+  return overall||{c:-2,dx:0,dy:0,scale:0}}
 window.ncc=async(a,b,cx0,cy0,szBase,msBase)=>{const A=data(toCanvas(await loadImg(a))),B=data(toCanvas(await loadImg(b)));
   const gA0=gray(A),gB0=gray(B),W0=A.width,H0=A.height;
   // multi-scale: sparkles decorrelate in 0.5s, but large caustic structures
@@ -226,13 +273,16 @@ window.ncc=async(a,b,cx0,cy0,szBase,msBase)=>{const A=data(toCanvas(await loadIm
       if(Math.hypot(dx,dy)<minShift)continue // moving component only
       const Q=win(gB,ax0+dx,ay0+dy,inW);let dot=0;for(let i2=0;i2<P.o.length;i2++)dot+=P.o[i2]*Q.o[i2];
       const c=dot/(P.e*Q.e);if(c>best.c)best={c,dx,dy}}
+    best.ucx=cx;best.ucy=cy // ACTUAL window center after clamping
     return best}
   let overall=null
-  for(const[f,sz,ms]of[[2,288,56],[4,560,190]]){
+  for(const[f,sz,ms]of[[2,320,40],[4,480,170]]){
     const pA=poolN(gA0,f),pB=poolN(gB0,f)
-    const r=nccAt(pA,pB,Math.floor(cx0/f),Math.floor(cy0/f),Math.floor(sz/f),Math.floor(ms/f),Math.max(2,Math.floor(6/f)))
+    const r=nccAt(pA,pB,Math.floor(cx0/f),Math.floor(cy0/f),Math.floor(sz/f),Math.floor(ms/f),Math.max(1,Math.floor(4/f)))
     if(!r)continue
-    const cand={c:r.c,dx:r.dx*f,dy:r.dy*f,scale:f}
+    const cand={c:r.c,dx:r.dx*f,dy:r.dy*f,scale:f,ucx:r.ucx*f,ucy:r.ucy*f}
+    // prefer the finest confident scale (angle resolution); fall back by c
+    if(cand.c>=0.25){overall=cand;break}
     if(!overall||cand.c>overall.c)overall=cand
   }
   return overall||{c:-2,dx:0,dy:0,scale:0}}
@@ -316,8 +366,13 @@ async function main () {
   if (OPT.build) {
     log('building app (vite build)...')
     execFileSync(process.execPath, [path.join(ROOT, 'node_modules/vite/bin/vite.js'), 'build', '--logLevel', 'error'], { cwd: ROOT, stdio: 'inherit' })
+    log('building consumer-test...')
+    execFileSync(process.execPath, [path.join(ROOT, 'node_modules/vite/bin/vite.js'), 'build', '--config', 'consumer-test/vite.config.js', '--logLevel', 'error'], { cwd: ROOT, stdio: 'inherit' })
   }
-  const { srv, port } = await serve(path.join(ROOT, 'dist'))
+  const { srv, port } = await serve({
+    '/': path.join(ROOT, 'dist'),
+    '/consumer': path.join(ROOT, 'dist-consumer'),
+  })
   const browser = await launchBrowser()
 
   const consoleErrors = []
@@ -405,9 +460,58 @@ async function main () {
       const flow = await page.evaluate(([x, z]) => window.__oo?.getFlowAt ? window.__oo.getFlowAt(x, z) : null, [ci2.cx + ci2.r * 0.6, pose[0][2]])
       await pump(page, 0.5)
       const f2 = await capture(cdp)
-      g5data[preset] = { f1, f2, ci: ci2, seabedAt, flow, pose }
+      await pump(page, 0.5)
+      const f3 = await capture(cdp)
+      g5data[preset] = { f1, f2, f3, ci: ci2, seabedAt, flow, pose }
     } else {
       g5data[preset] = null
+    }
+
+    // ---------------- R-item evidence shots (VERIFY.md: only verify.mjs
+    // may produce claimable evidence) ----------------
+    async function shotAt (pose, name) {
+      await setCam(page, pose)
+      await pump(page, 0.05)
+      const b64 = await capture(cdp)
+      fs.writeFileSync(fileOf(name), Buffer.from(b64, 'base64'))
+      return b64
+    }
+    if (preset === 'blackflag') {
+      // R3: prop reflection on displaced water (buoy close-up)
+      await shotAt([[26, 2.2, 9], [40, 0.2, 9]], 'r3-reflection.png')
+      // R5: caustics close view for the ref_caustics side-by-side
+      const r5b64 = await shotAt([[0, -10, 0], [30, -27, 3]], 'r5-closeup.png')
+      const refC = fs.readFileSync(path.join(ROOT, 'reference/ref_caustics.jpg')).toString('base64')
+      const r5crop = await lab.evaluate(([b, x, y, w, h]) => window.cropPng(b, x, y, w, h, 1), [r5b64, 320, 160, 640, 400])
+      const sheet5 = await lab.evaluate(([cells, t]) => window.makeSheet(cells, 2, 480, 300, t),
+        [[{ b64: r5crop, label: 'OpenOcean caustics — floor is 28 m deep: soft dapple is physical' }, { b64: refC, label: 'reference/ref_caustics.jpg (~5 m scene)' }], `${tag} R5 side-by-side`])
+      fs.writeFileSync(fileOf('r5-vsref.png'), Buffer.from(sheet5, 'base64'))
+      // R6: shafts showcase (underwater, angled across the beams)
+      await shotAt([[0, -13, 0], [40, -4, 12]], 'r6-shafts.png')
+      // R8: one session, three user-style angles
+      await shotAt([[-120, 180, 80], [100, 0, -40]], 'r8-high.png')
+      await shotAt([[-30, 2.5, -15], [200, 0, 30]], 'r8-wavelevel.png')
+      await shotAt([[-10, -9, 5], [60, -20, -10]], 'r8-underwater.png')
+    }
+    if (preset === 'storm') {
+      // R4: birth->stretch->fade time strip of one foam area + ref side-by-side
+      const stripPose = [[10, 12, -4], [-6, 0, -4]]
+      const strip = []
+      for (let i = 0; i < 4; i++) {
+        await setCam(page, stripPose)
+        if (i > 0) await pump(page, 2.5)
+        else await pump(page, 0.05)
+        const t = await page.evaluate(() => window.__oo.time())
+        strip.push({ b64: await capture(cdp), label: `sim t=${t.toFixed(1)}s (same 30 m patch of sea)` })
+      }
+      const stripSheet = await lab.evaluate(([cells, t]) => window.makeSheet(cells, 4, 320, 180, t),
+        [strip, `${tag} R4 foam time strip — storm, fixed camera, 2.5 s spacing`])
+      fs.writeFileSync(fileOf('r4-strip.png'), Buffer.from(stripSheet, 'base64'))
+      const ref26 = fs.readFileSync(path.join(ROOT, 'reference/ref_26.png')).toString('base64')
+      const r4crop = await lab.evaluate(([b, x, y, w, h]) => window.cropPng(b, x, y, w, h, 1), [strip[0].b64, 10, 150, 720, 420])
+      const sheet4 = await lab.evaluate(([cells, t]) => window.makeSheet(cells, 2, 480, 280, t),
+        [[{ b64: r4crop, label: 'OpenOcean storm foam' }, { b64: ref26, label: 'reference/ref_26.png (storm foam)' }], `${tag} R4 side-by-side`])
+      fs.writeFileSync(fileOf('r4-vsref.png'), Buffer.from(sheet4, 'base64'))
     }
 
     // sweep on the designated preset
@@ -423,6 +527,22 @@ async function main () {
       }
     }
     await page.close()
+  }
+
+  // R8: consumer-test through the public API (own page, headless shot)
+  try {
+    const cpage = await browser.newPage({ viewport: { width: VIEW_W, height: VIEW_H }, deviceScaleFactor: 1 })
+    cpage.on('pageerror', e => pageErrors.push('[consumer] ' + String(e).slice(0, 300)))
+    const ccdp = await cpage.context().newCDPSession(cpage)
+    await cpage.goto(`http://127.0.0.1:${port}/consumer/?backend=${backend}`, { waitUntil: 'load', timeout: 30000 })
+    await cpage.waitForFunction(() => window.__consumer && window.__consumer.ready, null, { timeout: 60000 })
+    const shot = await ccdp.send('Page.captureScreenshot', { format: 'png' })
+    fs.writeFileSync(fileOf('consumer.png'), Buffer.from(shot.data, 'base64'))
+    await cpage.close()
+    log('consumer-test shot ok')
+  } catch (e) {
+    failures.push('consumer-test failed: ' + String(e).slice(0, 200))
+    log('consumer-test FAILED', e.message)
   }
 
   // ------------------------------------------------------------ gate engine
@@ -558,13 +678,16 @@ async function main () {
       fs.writeFileSync(fileOf('g5-boundary.png'), Buffer.from(ann, 'base64'))
     }
     // flow correlation on a seabed point inside the region
-    const target = [d.ci.cx + d.ci.r * 0.45, (d.seabedAt ?? -28), camPos[2]]
+    const target = [d.ci.cx + d.ci.r * 0.77, (d.seabedAt ?? -28), camPos[2]]
     const T = proj(target)
     if (!T) {
       addGate('G5b', 'blackflag', false, 'target offscreen', '', '')
     } else {
-      const best = await lab.evaluate(([a, b, cx, cy]) => window.ncc(a, b, cx | 0, cy | 0, 288, 56), [d.f1, d.f2, T[0], T[1]])
-      // multi-scale result includes .scale for the winning level
+      // temporal-difference registration: |f2-f1| vs |f3-f2| — static seabed
+      // texture cancels; the offset is the pattern's 0.5 s displacement
+      const best = await lab.evaluate(([a, b, c, cx, cy]) => window.nccDiff(a, b, c, cx | 0, cy | 0), [d.f1, d.f2, d.f3, T[0], T[1]])
+      const dv = await lab.evaluate(([a, b]) => window.diffViz(a, b, 10), [d.f1, d.f2])
+      fs.writeFileSync(fileOf('g5-diffviz.png'), Buffer.from(dv, 'base64'))
       // pixel offset -> world direction on the seabed plane
       const invAt = (px, py) => { // intersect view ray with plane y=target[1]
         const tanF = Math.tan(FOV_Y * Math.PI / 360), aspect = VIEW_W / VIEW_H
@@ -579,7 +702,9 @@ async function main () {
         const t = (target[1] - camPos[1]) / dir[1]
         return [camPos[0] + dir[0] * t, camPos[2] + dir[2] * t]
       }
-      const w0 = invAt(T[0], T[1]); const w1 = invAt(T[0] + best.dx, T[1] + best.dy)
+      // convert at the ACTUAL measured window center (clamping may move it)
+      const MX = best.ucx ?? T[0]; const MY = best.ucy ?? T[1]
+      const w0 = invAt(MX, MY); const w1 = invAt(MX + best.dx, MY + best.dy)
       const disp = [w1[0] - w0[0], w1[1] - w0[1]]
       const mag = Math.hypot(...disp)
       const flow = d.flow

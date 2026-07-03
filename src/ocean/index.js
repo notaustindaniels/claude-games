@@ -47,8 +47,8 @@ export function createOcean (renderer, scene, camera, opts = {}) {
     if (!preset) throw new Error('unknown preset ' + name)
     await fft.setPreset(preset)
     sky.applyPreset(preset)
-    foam.applyPreset(preset)
     caustics.applyPreset(preset)
+    foam.applyPreset(preset)
     shafts.applyPreset(preset)
     surface.applyPreset(preset, fft.getStats())
     post.applyPreset(preset)
@@ -74,6 +74,12 @@ export function createOcean (renderer, scene, camera, opts = {}) {
     post.post.render()
   }
 
+  function swellPeriod () {
+    if (!preset) return 7
+    const wp = 22 * Math.pow(9.81 * 9.81 / (preset.wind * preset.fetch), 1 / 3)
+    return 2 * Math.PI / wp
+  }
+
   function sunDirWorld () {
     const s = sky.U.sunDir.value
     return [-s.x, -s.y, -s.z] // direction FROM sun TOWARD the scene
@@ -88,6 +94,7 @@ export function createOcean (renderer, scene, camera, opts = {}) {
     get preset () { return presetName },
     get presetData () { return preset },
     sunDirWorld,
+    swellPeriod,
     constants: { seaLevel: SEA_LEVEL, seabedBaseY: SEABED_BASE_Y, causticRadius: CAUSTIC_RADIUS },
   }
 }

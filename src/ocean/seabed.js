@@ -66,7 +66,7 @@ export function createSeabed (scene, sky, waterU, caustics) {
     // downwelling attenuation with depth (per-preset absorption)
     const depth = max(float(0).sub(y), 0)
     const att = exp(waterU.absorb.mul(depth.mul(1.35)).negate())
-    const cauFade = clamp(exp(depth.mul(-0.02)).mul(1.15), 0.25, 1)
+    const cauFade = clamp(exp(depth.mul(-0.012)).mul(1.25), 0.3, 1)
     const cau = caustics.lightAt(w, cauFade)
     return vec4(alb.mul(ndl).mul(cau).mul(att.mul(1.35).add(0.028)).mul(waterU.sunTint), 1)
   })()

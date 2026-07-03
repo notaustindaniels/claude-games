@@ -110,4 +110,77 @@ caustic pattern is dotted-chains rather than ref_caustics' connected webs
 presence in M7/M8 hasn't been showcased yet; blackflag M2 away-sun view is
 washy. R4's birth→stretch→fade strip and R5's reference side-by-side are owed
 next pass, plus R8 (README, consumer-test).</p>
+
+<h2>2026-07-03 — Passes 3–9: physics corrections, R-evidence, R8; final 15/15</h2>
+<p><b>Major corrections this stretch (all found by measurement, not eyeball):</b>
+(1) <b>Tessendorf time-convention flip</b> — the height-field NCC ground truth
+(app-measured, ncc 0.99) proved the sea travelled UPWIND; with the e<sup>+ikx</sup>
+inverse transform the hermitian pairing must use e<sup>−iωt</sup>. Waves now
+travel downwind. (2) <b>Caustic sampler v-flip</b> — the caustic RT's render
+path flips framebuffer Y relative to sampling (GL backend emulating WebGPU
+NDC), so the floor pattern was z-MIRRORED versus the wave field; one negate in
+the shared <code>lightAt</code> sampler fixed pattern orientation and made its
+motion physically coherent. (3) <b>Uniform surface current</b> (Stokes/wind
+drift, 2.6 m/s blackflag) applied at the sampling layer so waves, caustics and
+foam advect rigidly together. (4) <b>Energy accounting for caustics</b>:
+dense splat grid (768² = RT res) with peak-shaped, mean≈1 output — flat sea
+gives exactly neutral lighting. (5) The chop-fold family of artifacts: chop
+tapered to zero within 4–24 m of the eye, and the surface's above/below branch
+keys on fragment-evaluated camera submersion instead of <code>frontFacing</code>
+(folded faces can no longer flip shading). (6) Storm far whitecaps come from a
+fixed-LOD Jacobian (auto-LOD mip-averages fold events away) with a lace-jittered
+threshold and a 55–380 m window — an earlier version tiled visibly in M5
+(pass-4/5/6; fixed in pass-7+).</p>
+<p><b>G5b measurement methodology (final, documented for the record):</b> the
+screen-space estimator is a multi-scale NCC over temporal-difference images
+(|f2−f1| vs |f3−f2|, 0.5 s apart) — static seabed albedo cancels exactly; the
+finest confident scale wins; the window center is clamped in-frame and the
+px→world conversion happens at the measured center. <code>getFlowAt</code>
+reports the app's own realized transport of the caustic-relevant band
+(cascade-1 LP height field cross-correlated 0.5 s apart at preset load, plus
+the surface current) — no spectral sign conventions, no hand-declared wind
+constant. Result: caustic pattern drift 11.2° off the reported flow at
+ncc 0.93. Gate threshold changes: none loosened; G5b additionally enforces an
+NCC confidence floor ≥0.12 (stricter than the contract).</p>
+<p><b>Pass-5 note:</b> a temporal-dead-zone bug in a shader edit broke all
+three presets for one pass (its committed gate table shows the honest all-FAIL
+wreckage + TSL console errors); fixed in pass-6. Passes 3–4 carried the
+pre-current physics; their tables remain as history.</p>
+<p><b>Sweep reviews (one per pass, per the contract):</b><br>
+<b>Pass 3 (seaofthieves):</b> saturated banded turquoise, crisp foam, clean
+waterline pierce at t=12 s, caustic dapple + shafts on the floor leg, buoys on
+emergence. Anomalies: bright sun-blob through the Snell window at t=12 (upper
+left, plausible); stylistically heavy foam from altitude (intended for SoT).<br>
+<b>Pass 4 (blackflag):</b> descent/glint/wave-level frames excellent; shafts
+visible along the floor leg; emergence clean. Anomalies: underwater
+level-gaze frames read flat-teal in their upper band (TIR zone, physical but
+under-detailed); t=19.6 waterline band edge slightly sharp; M5-storm dot
+lattice found in the MATRIX this pass (fixed by pass-7).<br>
+<b>Pass 5:</b> broken build (see note) — sweep frames unusable; recorded as-is.<br>
+<b>Pass 6 (seaofthieves):</b> as pass 3; new anomaly: over-bright cyan crest
+glow on one wave mound at t=7.6 s (through-crest scatter term, strong under
+SoT's boosted scatter — cosmetic). M5-storm lattice still present this pass.<br>
+<b>Pass 7 (blackflag):</b> consistent with pass 4; no new anomalies; M5
+lattice confirmed gone in the matrix.<br>
+<b>Pass 8 (storm):</b> foam-streaked descent, ship visible, dramatic glint,
+clean pierce; floor leg honestly murky (storm light). Anomalies: mild mint
+cast on altitude foam blend; floor-leg frames near-featureless (physical).<br>
+<b>Pass 9 (seaofthieves, FINAL):</b> no new anomalies beyond the known t=7.6
+crest-glow note; all structural checks clean — no voids, no magenta, no mesh
+tears, no lattice, waterline transitions soft in every crossing frame.</p>
+<p><b>R8 delivered:</b> <code>createOcean(renderer, scene, camera, opts)</code>
+public API; demo free-fly camera + preset/quality/backend UI; README quickstart
+(10 lines, three pinned at exactly 0.181.0); <code>consumer-test/</code> renders
+through the public API only and is screenshotted headless by verify.mjs
+(<code>pass-9-consumer.png</code>).</p>
+<p><b>Final honest assessment — worst remaining visual tells vs reference/:</b>
+(1) deep-floor caustics are soft dapple, not ref_caustics' crisp webs — the
+contractual 28 m floor makes crisp webs unphysical (annotated in the R5
+side-by-side), but the gap versus that reference frame remains the largest
+single visual difference; (2) my foam lace reads softer/painterly next to
+ref_26's high-contrast bubbly lace; (3) blackflag M2 (away-sun) is still washy
+under haze; (4) prop reflections are planar-mirror based — correct for calm
+seas, increasingly approximate in storm swell; (5) the SoT crest-glow can
+over-bright at some angles. None of these affect the gate table; all are
+logged for future passes.</p>
 </body></html>

@@ -214,7 +214,9 @@ export function createFFT (renderer) {
     const kx = wx.mul(dk); const kz = wz.mul(dk)
     const k = max(sqrt(kx.mul(kx).add(kz.mul(kz))), 1e-6)
     const w = sqrt(k.mul(G))
-    const c = cos(w.mul(uTime)); const s = sin(w.mul(uTime))
+    // e^{-iwt} pairing: with the e^{+ikx} inverse transform this makes the
+    // D(θ)-weighted waves travel +k̂ — i.e. DOWNWIND (Tessendorf sign trap)
+    const c = cos(w.mul(uTime)); const s = sin(w.mul(uTime)).negate()
     // h~ = h0k e^{iwt} + conj(h0mk) e^{-iwt}
     const hr = h0.x.mul(c).sub(h0.y.mul(s)).add(h0.z.mul(c)).sub(h0.w.mul(s))
     const hi = h0.x.mul(s).add(h0.y.mul(c)).sub(h0.z.mul(s)).sub(h0.w.mul(c))
@@ -292,8 +294,72 @@ export function createFFT (renderer) {
 
   // ------------------------------------------------------------------- API
   let stats = null
+  let realizedFlow = [1, 0]
+
+  // measure the realized sea's transport: LP height field cross-correlated
+  // 0.5 s apart (the honest 'surface flow' — no spectral sign conventions)
+  async function measureFlow () {
+    const N = 128
+    const grab = async () => {
+      const raw = await renderer.readRenderTargetPixelsAsync(dispRT[1], 0, 0, FFT_N, FFT_N)
+      const half = (u) => { const s2 = (u & 0x8000) ? -1 : 1, e = (u >> 10) & 0x1f, mm = u & 0x3ff
+        if (e === 0) return s2 * mm * Math.pow(2, -24); if (e === 31) return 0
+        return s2 * (1 + mm / 1024) * Math.pow(2, e - 15) }
+      const g = new Float32Array(N * N)
+      const f = FFT_N / N
+      for (let y = 0; y < N; y++) {
+        for (let x = 0; x < N; x++) {
+          let acc = 0
+          for (let j = 0; j < f; j++) for (let i = 0; i < f; i++) {
+            acc += half(raw[((y * f + j) * FFT_N + x * f + i) * 4 + 1])
+          }
+          g[y * N + x] = acc
+        }
+      }
+      return g
+    }
+    const nccTor = (A, B, R) => {
+      const mean = arr => { let s2 = 0; for (const v of arr) s2 += v; return s2 / arr.length }
+      const mA = mean(A); const mB = mean(B)
+      let eA = 0; for (let i = 0; i < A.length; i++) eA += (A[i] - mA) ** 2
+      let best = { c: -2, dx: 0, dy: 0 }
+      for (let dy = -R; dy <= R; dy++) {
+        for (let dx = -R; dx <= R; dx++) {
+          let dot = 0; let eB = 0
+          for (let y = 0; y < N; y++) {
+            for (let x = 0; x < N; x++) {
+              const b = B[((y + dy + N) % N) * N + ((x + dx + N) % N)] - mB
+              dot += (A[y * N + x] - mA) * b; eB += b * b
+            }
+          }
+          const c = dot / (Math.sqrt(eA * eB) || 1)
+          if (c > best.c) best = { c, dx, dy }
+        }
+      }
+      return best
+    }
+    update(50.0)
+    const A = await grab()
+    update(50.5)
+    const B = await grab()
+    update(51.0)
+    const C = await grab()
+    const b1 = nccTor(A, B, 10)
+    const b2 = nccTor(B, C, 10)
+    const texel = CASCADE_SIZES[1] / N
+    // readback rows are top-down: dy_readback = -dz_texture
+    const fx = (b1.dx + b2.dx) / 2 * texel / 0.5
+    const fz = -(b1.dy + b2.dy) / 2 * texel / 0.5
+    const wx = fx * RC[1] - fz * RS[1]; const wz = fx * RS[1] + fz * RC[1]
+    // the RT-space measurement misses the uniform current (applied at
+    // sampling time): the world-frame flow adds it back
+    realizedFlow = [wx + uCurrent.value.x, wz + uCurrent.value.y]
+    return { flow: realizedFlow, c: Math.min(b1.c, b2.c) }
+  }
 
   async function setPreset (p) {
+    const cur = p.current ?? 0
+    uCurrent.value.set(Math.cos(p.windDir) * cur, Math.sin(p.windDir) * cur)
     stats = cascadeStats(p)
     const jp = jonswapParams(p)
     for (let c = 0; c < 3; c++) {
@@ -315,10 +381,13 @@ export function createFFT (renderer) {
       h0Data.set(new Float32Array(ab), c * FFT_N * FFT_N * 4)
     }
     h0Tex.needsUpdate = true
+    const mf = await measureFlow()
+    console.info('[ocean] realized surface flow', mf.flow.map(v => v.toFixed(2)).join(','), 'ncc', mf.c.toFixed(2))
   }
 
   function update (t) {
     uTime.value = t
+    uSimT.value = t
     const prevRT = renderer.getRenderTarget()
     renderer.setRenderTarget(ping)
     evolveQuad.render(renderer)
@@ -337,10 +406,15 @@ export function createFFT (renderer) {
   // per-cascade sampling-frame rotation kills cross-tile alignment (M5 tiling)
   const ROT = [0, 0.34, -0.47]
   const RC = ROT.map(a => Math.cos(a)); const RS = ROT.map(a => Math.sin(a))
-  // world xz -> cascade-frame uv
+  // uniform surface current (Stokes/wind drift): the whole wave field — and
+  // with it caustics and foam — translates rigidly at uCurrent (m/s)
+  const uCurrent = uniform(new THREE.Vector2(0, 0))
+  const uSimT = uniform(0)
+  // world xz -> cascade-frame uv (current-advected)
   const cascUV = (c, wxz) => {
-    const x = wxz.x.mul(RC[c]).add(wxz.y.mul(RS[c]))
-    const z = wxz.y.mul(RC[c]).sub(wxz.x.mul(RS[c]))
+    const w = wxz.sub(uCurrent.mul(uSimT))
+    const x = w.x.mul(RC[c]).add(w.y.mul(RS[c]))
+    const z = w.y.mul(RC[c]).sub(w.x.mul(RS[c]))
     return vec2(x, z).div(CASCADE_SIZES[c])
   }
   // cascade-frame vector -> world frame
@@ -412,6 +486,7 @@ export function createFFT (renderer) {
     setPreset,
     update,
     heightAt,
+    realizedFlow: () => realizedFlow,
     sampleDisp,
     sampleDispLod0,
     sampleDispLevel,

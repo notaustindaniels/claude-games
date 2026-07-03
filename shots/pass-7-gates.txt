@@ -1,0 +1,23 @@
+OpenOcean v2 — gate table — pass-7 — 2026-07-03T16:48:24.251Z
+backend=webgl presets=blackflag,storm,seaofthieves sweepPreset=blackflag viewport=1280x720
+ENVIRONMENT LIMITATION: WebGPU unavailable in this container's Chromium (navigator.gpu undefined); confirmed for headless AND headed system Chrome + CfT builds. Gates run on webgl per VERIFY.md; the required single webgpu matrix capture is impossible here and is logged each pass.
+
+gate | scope         | value        | threshold        | verdict | note
+-----+---------------+--------------+------------------+---------+-----
+G1   | blackflag     | 4.6349       | >=0.25           | PASS    | lapVar far=1044.8 near=225.4 rows 364..482 vs 602..720
+G1   | storm         | 0.5653       | >=0.25           | PASS    | lapVar far=336.3 near=595.0 rows 363..482 vs 601..720
+G1   | seaofthieves  | 4.0455       | >=0.25           | PASS    | lapVar far=885.5 near=218.9 rows 364..482 vs 602..720
+G2   | M1            | 0.1657       | >=0.12           | PASS    | pairs 0.170 0.125 0.203
+G2   | M4            | 0.1972       | >=0.12           | PASS    | pairs 0.164 0.217 0.210
+G3   | blackflag     | 0.0000       | =0               | PASS    | clean
+G3   | storm         | 0.0000       | =0               | PASS    | clean
+G3   | seaofthieves  | 0.0000       | =0               | PASS    | clean
+G4a  | storm         | 17.7394      | >2m              | PASS    | minSurf=-4.90 maxSeabed=-22.64
+G4b  | storm         | 0.0000       | <10deg           | PASS    | 12 shafts, floorFails=0
+G4c  | storm         | 7.8308       | >=4m             | PASS    | Hs=4*std(surface)
+G5a  | blackflag     | 0.0095       | <0.08            | PASS    | 25 boundary samples
+G5b  | blackflag     | 11.2247      | <25deg & offset!=0 | PASS    | ncc=0.91@x2 px(40,-22) world(2.80,2.61) flow=8.77,5.43
+G6   | storm M1      | 0.0001       | <0.003           | PASS    | declared=0.000% autoFlat=0.014% (rgb bucket 11,2,2) flatConsts=0
+G6   | storm M4      | 0.0008       | <0.003           | PASS    | declared=0.000% autoFlat=0.083% (rgb bucket 63,63,63) flatConsts=0
+
+SUMMARY: 15/15 gate rows pass; consoleErrors=0; pageErrors=0

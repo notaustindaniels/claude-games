@@ -201,8 +201,11 @@ export function createSurface (scene, fft, sky, foam, caustics, reflJack) {
       jf.addAssign(jj.jxx.mul(U.chop)); jfzz.addAssign(jj.jzz.mul(U.chop)); jfxz.addAssign(jj.jxz.mul(U.chop))
     }
     const jacFar = jf.mul(jfzz).sub(jfxz.mul(jfxz))
-    const wcFar = smoothstep(foam.U.jThr, foam.U.jThr.sub(0.16), jacFar)
-      .mul(smoothstep(55, 160, dist))
+    // jitter the threshold so mip-quantized fold events never read as a
+    // lattice, and fade the term out before tile periodicity could show (M5)
+    const jitter = texture(lace2, w.div(3.3).add(vec2(0.19, 0.67))).x.mul(0.22).sub(0.11)
+    const wcFar = smoothstep(foam.U.jThr.add(jitter), foam.U.jThr.add(jitter).sub(0.16), jacFar)
+      .mul(smoothstep(55, 160, dist)).mul(float(1).sub(smoothstep(240, 380, dist)))
     const l1 = texture(lace1, w.div(14.5)).x
     const l2 = texture(lace2, w.div(5.8).add(vec2(0.37, 0.11))).x
     const l3 = texture(lace1, w.div(31.7).add(vec2(0.71, 0.43))).x
@@ -219,7 +222,8 @@ export function createSurface (scene, fft, sky, foam, caustics, reflJack) {
     const micro = U.foamAmbient.mul(l2.mul(0.7).add(l3.mul(0.5))).mul(smoothstep(0.05, 0.5, foamRaw.add(U.foamAmbient)))
     const foamA = clamp(body.add(filaments.mul(float(1).sub(body))).add(micro), 0, 1)
     const foamNdl = max(dot(nUp, sunD), 0).mul(0.72).add(0.30)
-    const foamCol = U.foamTint.mul(foamNdl).mul(waterLight.mul(0.62).add(vec3(0.30)))
+    const wlLum = waterLight.r.mul(0.30).add(waterLight.g.mul(0.45)).add(waterLight.b.mul(0.25))
+    const foamCol = U.foamTint.mul(foamNdl).mul(vec3(wlLum).mul(0.66).add(vec3(0.30)))
     above.assign(mix(above, foamCol, foamA.mul(0.96)))
 
     // ---------- below-water shading (surface seen from underneath) ----------

@@ -268,6 +268,86 @@ try {
     s0 = half(raw2[0]).toFixed(3); s64 = half(raw2[64 * 4]).toFixed(3)
     step('I-dx-phase', `dx(0)=${s0} dx(64)=${s64} h(0)=${half(raw2[1]).toFixed(3)} (dx should be 90deg out of phase with h)`)
   }
+
+  // ---- J: top-10 |h0| bins of cascade 0 for blackflag (low-k amplitude audit)
+  {
+    const { PRESETS } = await import('/src/ocean/presets.js')
+    await fft.setPreset(PRESETS.blackflag)
+    const d = fft.__debugH0().image.data
+    const tops = []
+    for (let n = 0; n < FFT_N; n++) for (let m = 0; m < FFT_N; m++) {
+      const o = (n * FFT_N + m) * 4
+      const amp = Math.hypot(d[o], d[o + 1])
+      if (amp > 1e-6) tops.push([amp, m, n])
+    }
+    tops.sort((a, b) => b[0] - a[0])
+    const wrap = (i) => i >= 128 ? i - 256 : i
+    step('J-top-bins', tops.slice(0, 10).map(([a, m, n]) => `(${wrap(m)},${wrap(n)}):${a.toFixed(3)}`).join(' '))
+  }
+
+  // ---- K: ground truth — caustic RT motion vs height-field motion,
+  // both in the SAME readback convention (flip-immune relative angle)
+  {
+    const { createCaustics } = await import('/src/ocean/caustics.js')
+    const { uniform: uni } = await import('three/tsl')
+    const skyStub = { U: { sunDir: uni(new THREE.Vector3(Math.cos(0.84) * Math.cos(0), Math.sin(0.84), Math.cos(0.84) * Math.sin(0)).normalize()) } }
+    const ca = createCaustics(renderer, fft, skyStub)
+    const half = (u) => { const s2 = (u & 0x8000) ? -1 : 1, e = (u >> 10) & 0x1f, m = u & 0x3ff
+      if (e === 0) return s2 * m * Math.pow(2, -24); if (e === 31) return 0
+      return s2 * (1 + m / 1024) * Math.pow(2, e - 15) }
+    const grabC = async () => {
+      const raw = await renderer.readRenderTargetPixelsAsync(ca.rt, 128, 128, 512, 512)
+      const N = 128, f = 4
+      const g = new Float32Array(N * N)
+      for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+        let a = 0
+        for (let j = 0; j < f; j += 2) for (let i = 0; i < f; i += 2) a += half(raw[((y * f + j) * 512 + x * f + i) * 4])
+        g[y * N + x] = a
+      }
+      return g
+    }
+    const nccTor = (A, B, N, R) => {
+      const mean = arr => arr.reduce((s2, v) => s2 + v, 0) / arr.length
+      const mA = mean(A), mB = mean(B)
+      let eA = 0; for (let i = 0; i < A.length; i++) eA += (A[i] - mA) ** 2
+      let best = { c: -2, dx: 0, dy: 0 }
+      for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) {
+        let dot = 0, eB = 0
+        for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+          const b = B[((y + dy + N) % N) * N + ((x + dx + N) % N)] - mB
+          dot += (A[y * N + x] - mA) * b; eB += b * b
+        }
+        const c = dot / (Math.sqrt(eA * eB) || 1)
+        if (c > best.c) best = { c, dx, dy }
+      }
+      return best
+    }
+    fft.update(60.0); ca.update(0, 0)
+    const C1 = await grabC()
+    fft.update(60.5); ca.update(0, 0)
+    const C2 = await grabC()
+    const bc = nccTor(C1, C2, 128, 24)
+    // caustic RT: 512 px window read = 136m world / 512px... crop 512 of 768: world span = 136*512/768? RT full = 136m over 768px -> texel 0.177m; downsample f=4 -> 0.708m/texel
+    step('K-caustic-motion', `texels(${bc.dx},${bc.dy}) world=(${(bc.dx * 0.708).toFixed(2)},${(bc.dy * 0.708).toFixed(2)})m per 0.5s ncc=${bc.c.toFixed(2)}`)
+    // height field, same convention (readback top-down both)
+    const grabH = async () => {
+      const raw = await renderer.readRenderTargetPixelsAsync(fft.__debugDispRT(0), 0, 0, FFT_N, FFT_N)
+      const N = 64, f = 4
+      const g = new Float32Array(N * N)
+      for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+        let a = 0
+        for (let j = 0; j < f; j += 2) for (let i = 0; i < f; i += 2) a += half(raw[((y * f + j) * FFT_N + x * f + i) * 4 + 1])
+        g[y * N + x] = a
+      }
+      return g
+    }
+    fft.update(61.0)
+    const H1 = await grabH()
+    fft.update(61.5)
+    const H2 = await grabH()
+    const bh = nccTor(H1, H2, 64, 16)
+    step('K-height-motion', `texels(${bh.dx},${bh.dy}) world=(${(bh.dx * 250 / 256 * 4).toFixed(2)},${(bh.dy * 250 / 256 * 4).toFixed(2)})m per 0.5s (cascade frame) ncc=${bh.c.toFixed(2)}`)
+  }
   out.done = true
 } catch (e) { out.fatal = String(e && e.stack || e); step('fatal', out.fatal.slice(0, 500)); out.done = true }
 </script></body></html>

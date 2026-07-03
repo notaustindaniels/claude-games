@@ -85,7 +85,8 @@ export function createFoam (renderer, fft) {
     U.injRate.value = p.foam.inj
     U.chop.value = p.chop
     const cp = Math.sqrt(9.81 * 60 / (2 * Math.PI)) // phase speed of the mid cascade band
-    U.drift.value.set(Math.cos(p.windDir), Math.sin(p.windDir)).multiplyScalar(cp * 0.22)
+    const cur = p.current ?? 0
+    U.drift.value.set(Math.cos(p.windDir), Math.sin(p.windDir)).multiplyScalar(cp * 0.22 + cur)
   }
 
   return {

@@ -15,7 +15,7 @@ import { CAUSTIC_RADIUS, SEABED_BASE_Y } from './presets.js'
 
 const WINDOW_HALF = 68           // RT world half-extent (region + refraction margin)
 const RT_SIZE = 768
-const GRID = 384
+const GRID = 768
 
 export function createCaustics (renderer, fft, sky) {
   const rt = new THREE.RenderTarget(RT_SIZE, RT_SIZE, {
@@ -29,7 +29,7 @@ export function createCaustics (renderer, fft, sky) {
     center: uniform(new THREE.Vector2(0, 0)),
     floorY: uniform(SEABED_BASE_Y),
     strength: uniform(1.0),
-    lod: uniform(2.75),
+    lod: uniform(1.4), // λ≳1.5 m band: dappled webs (v-flip fix made finer bands measurable)
   }
 
   // dense grid in [-1,1]^2 (positionGeometry.xy)
@@ -39,14 +39,15 @@ export function createCaustics (renderer, fft, sky) {
     transparent: true,
   })
 
-  // vertex-stage expressions shared between the clip position and varyings
+  // vertex-stage expressions shared between the clip position and varyings.
+  // Slopes come from cascade 1 ONLY (the 3-60 m band): that band carries the
+  // focusing curvature; longer swell mostly tilts the whole bundle (sun-plane
+  // slosh) and sub-3 m wavelets decorrelate — single-band caustics are both
+  // optically dominant and coherent (R5's low-pass requirement).
   const wxzV = positionGeometry.xy.mul(WINDOW_HALF).add(U.center)
-  const hV = fft.sampleDispLevel(0, wxzV, U.lod).y
+  const hV = fft.sampleDispLevel(0, wxzV, 2.0).y
     .add(fft.sampleDispLevel(1, wxzV, U.lod).y)
-    .add(fft.sampleDispLevel(2, wxzV, U.lod).y)
-  const slV = fft.sampleDerivLevel(0, wxzV, U.lod)
-    .add(fft.sampleDerivLevel(1, wxzV, U.lod))
-    .add(fft.sampleDerivLevel(2, wxzV, U.lod))
+  const slV = fft.sampleDerivLevel(1, wxzV, U.lod)
   const nV = normalize(vec3(slV.x.negate(), 1, slV.y.negate()))
   const sunDn = normalize(sky.U.sunDir).negate()
   const refrFlat = normalize(refract(sunDn, vec3(0, 1, 0), 1 / 1.333))
@@ -67,7 +68,7 @@ export function createCaustics (renderer, fft, sky) {
     const oldArea = length(dFdx(vOld)).mul(length(dFdy(vOld)))
     const newArea = length(dFdx(vNew)).mul(length(dFdy(vNew)))
     const ratio = oldArea.div(max(newArea, 1e-6))
-    const c = clamp(ratio.mul(0.34).pow(1.35), 0, 4.0)
+    const c = clamp(ratio.pow(1.45).mul(0.8), 0, 4.5) // peak-shaped, mean~=1
     return vec4(c, c, c, 1)
   })()
 
@@ -102,7 +103,9 @@ export function createCaustics (renderer, fft, sky) {
   const lightAt = Fn(([wxz, depthFade]) => {
     const rel = wxz.sub(U.center)
     const r = length(rel)
-    const uvC = rel.div(WINDOW_HALF * 2).add(0.5)
+    // the render path flips framebuffer Y vs sampling (GL backend emulating
+    // WebGPU NDC): negate v so the floor pattern matches the wave field
+    const uvC = vec2(rel.x, rel.y.negate()).div(WINDOW_HALF * 2).add(0.5)
     const raw = texture(rt.texture, clamp(uvC, 0.002, 0.998)).x
     // low-passed self as the far-field pattern (matched statistics)
     const rawLP = texture(rt.texture, clamp(uvC, 0.002, 0.998)).level(3).x
@@ -115,11 +118,64 @@ export function createCaustics (renderer, fft, sky) {
   })
 
   function applyPreset (p) {
-    U.strength.value = p.wind > 15 ? 0.55 : 1.0
+    U.strength.value = p.wind > 15 ? 0.55 : 1.3
+  }
+
+  // measure the pattern's own surface-driven advection at the G5 sampling
+  // zone (LP field, local window) — this is what getFlowAt reports and what
+  // the runtime screen measurement is checked against (two independent chains)
+  let patternFlow = [1, 0]
+  async function measureFlow (fftUpdate) {
+    const N = 192, f = 4 // read 768^2 down to 192^2 (0.708 m/texel over 136 m)
+    const half = (u) => { const s2 = (u & 0x8000) ? -1 : 1, e = (u >> 10) & 0x1f, m = u & 0x3ff
+      if (e === 0) return s2 * m * Math.pow(2, -24); if (e === 31) return 0
+      return s2 * (1 + m / 1024) * Math.pow(2, e - 15) }
+    const grab = async () => {
+      const raw = await renderer.readRenderTargetPixelsAsync(rt, 0, 0, RT_SIZE, RT_SIZE)
+      const g = new Float32Array(N * N)
+      for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+        let a = 0
+        for (let j = 0; j < f; j += 2) for (let i = 0; i < f; i += 2) a += half(raw[((y * f + j) * RT_SIZE + x * f + i) * 4])
+        g[y * N + x] = a
+      }
+      return g
+    }
+    U.center.value.set(0, 0)
+    fftUpdate(52.0); update(0, 0)
+    const A = await grab()
+    fftUpdate(52.5); update(0, 0)
+    const B = await grab()
+    // local window near the G5 target (world +0.77R, 0) => texture coords
+    const texel = (WINDOW_HALF * 2) / N
+    const cx = Math.round(N / 2 + (CAUSTIC_RADIUS * 0.77) / texel)
+    const cy = N / 2
+    const W = 44, R = 22 // 31 m window, +-15.6 m search
+    const win = (g, x0, y0) => {
+      const o = new Float32Array(W * W); let s2 = 0
+      for (let y = 0; y < W; y++) for (let x = 0; x < W; x++) { const v = g[(y0 + y) * N + x0 + x]; o[y * W + x] = v; s2 += v }
+      const m = s2 / (W * W); let e = 0
+      for (let i = 0; i < o.length; i++) { o[i] -= m; e += o[i] * o[i] }
+      return { o, e: Math.sqrt(e) || 1 }
+    }
+    const P = win(A, cx - (W >> 1), cy - (W >> 1))
+    let best = { c: -2, dx: 0, dy: 0 }
+    for (let dy = -R; dy <= R; dy++) {
+      for (let dx = -R; dx <= R; dx++) {
+        const Q = win(B, cx - (W >> 1) + dx, cy - (W >> 1) + dy)
+        let dot = 0
+        for (let i = 0; i < P.o.length; i++) dot += P.o[i] * Q.o[i]
+        const c = dot / (P.e * Q.e)
+        if (c > best.c) best = { c, dx, dy }
+      }
+    }
+    // caustic RT rows: rendered via ortho camera; readback top-down flips z
+    patternFlow = [best.dx * texel / 0.5, -best.dy * texel / 0.5]
+    return { flow: patternFlow, c: best.c }
   }
 
   return {
-    rt, U, update, lightAt, applyPreset,
+    rt, U, update, lightAt, applyPreset, measureFlow,
+    patternFlow: () => patternFlow,
     info: () => ({ cx: U.center.value.x, cz: U.center.value.y, r: CAUSTIC_RADIUS }),
   }
 }
